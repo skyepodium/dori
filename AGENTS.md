@@ -95,6 +95,7 @@ When rules conflict, the narrower scoped `AGENTS.md` wins. When changing a rule,
 - Repository selection uses a dropdown with filtering and internal scrolling for large local inventories.
 - Worktree selection uses an always-visible source list because switching workspaces is a core workflow.
 - Do not hide worktrees behind a dropdown unless the dropdown is secondary to an always-visible primary worktree navigation.
+- Read-only refresh, worktree switching, and detail loading must preserve the existing screen structure. Avoid broad loading banners, text swaps, or global disabled states unless a mutation or destructive command is actively running.
 
 ## Design Token System
 

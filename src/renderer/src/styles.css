@@ -201,6 +201,17 @@ h2 {
   font-size: var(--font-size-sm);
 }
 
+.loading-placeholder {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-subtle) 0%,
+    var(--color-surface-raised) 48%,
+    var(--color-surface-subtle) 100%
+  );
+  border-bottom: 1px solid var(--color-border);
+  min-height: var(--size-source-list-row-height);
+}
+
 .empty-state {
   border: 1px dashed var(--color-border-strong);
   border-radius: var(--radius-panel);

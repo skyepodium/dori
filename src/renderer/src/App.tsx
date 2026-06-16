@@ -158,6 +158,17 @@ const OPERATION_LABEL_KEYS: Record<OperationName, TranslationKey> = {
   abortCherryPick: 'operationAbortCherryPick'
 };
 
+const BLOCKING_OPERATIONS = new Set<OperationName>([
+  'fetch',
+  'pull',
+  'push',
+  'commit',
+  'createWorktree',
+  'removeWorktree',
+  'cherryPick',
+  'abortCherryPick'
+]);
+
 const getGitApi = (): GitClientApi | null => {
   const gitWindow = window as WindowGitClientShape;
 
@@ -607,6 +618,10 @@ const DiffText = ({ diffText, label }: { diffText: string; label: string }): Rea
   );
 };
 
+const LoadingPlaceholder = ({ label }: { label: string }): ReactElement => (
+  <div aria-label={label} className="loading-placeholder" role="status" />
+);
+
 const CommitFileRow = ({
   file,
   isSelected,
@@ -735,7 +750,11 @@ const App = (): ReactElement => {
     selectedWorktree !== null && selectedWorktree.path !== state.repositoryPath;
   const dirtyFileCount = getStatusFileCount(state.status);
   const isDirty = dirtyFileCount > 0 || selectedWorktree?.hasChanges === true;
-  const canRunRepositoryAction = hasGitApi && hasRepository && !state.isLoading;
+  const isBlockingOperation = state.operation !== null && BLOCKING_OPERATIONS.has(state.operation);
+  const isOpeningRepository = state.operation === 'open';
+  const isRefreshingRepository = state.operation === 'refresh';
+  const canUseRepositorySelector = hasGitApi && !isBlockingOperation;
+  const canRunRepositoryAction = hasGitApi && hasRepository && !isBlockingOperation && !isOpeningRepository;
   const canRunWorktreeAction = canRunRepositoryAction && hasSelectedWorktree;
   const commitMessage = [state.commitSummary.trim(), state.commitDescription.trim()].filter(Boolean).join('\n\n');
   const commitTargetBranch = status.currentBranch || selectedWorktree?.branch || t('labelCurrentBranch');
@@ -756,12 +775,12 @@ const App = (): ReactElement => {
   const cherryPickDisabled =
     !canRunWorktreeAction ||
     selectedCommit === null ||
-    state.isLoading ||
+    isBlockingOperation ||
     selectedWorktree?.isLocked === true ||
     typeof gitApi?.cherryPick !== 'function';
   const abortCherryPickDisabled =
     !canRunWorktreeAction ||
-    state.isLoading ||
+    isBlockingOperation ||
     selectedWorktree?.isLocked === true ||
     typeof gitApi?.abortCherryPick !== 'function';
   const selectedChangedFile =
@@ -771,8 +790,7 @@ const App = (): ReactElement => {
           filePath: state.selectedChangedFilePath,
           diffScope: state.selectedChangedFileScope
         };
-  const shouldShowOperationMessage =
-    state.isLoading && state.operation !== null && !['open', 'refresh'].includes(state.operation);
+  const shouldShowOperationMessage = isBlockingOperation && state.operation !== null;
 
   const setLanguage = (language: Language): void => {
     writeLanguage(language);
@@ -799,7 +817,7 @@ const App = (): ReactElement => {
     async (
       operation: OperationName,
       action: () => Promise<Partial<AppState>>,
-      successMessage: string
+      successMessage: string | null
     ): Promise<void> => {
       setState((current) => ({
         ...current,
@@ -897,7 +915,7 @@ const App = (): ReactElement => {
     void runOperation(
       'refresh',
       () => readRepository(state.repositoryPath, state.selectedWorktreePath, t),
-      t('successRefreshRepository')
+      null
     );
   };
 
@@ -946,7 +964,7 @@ const App = (): ReactElement => {
           ...details
         };
       },
-      t('successRefreshRepository')
+      null
     );
   };
 
@@ -1210,7 +1228,7 @@ const App = (): ReactElement => {
           <button
             aria-expanded={state.repositoryMenuOpen}
             className="selector-trigger"
-            disabled={state.isLoading}
+            disabled={!canUseRepositorySelector}
             onClick={() =>
               setState((current) => ({
                 ...current,
@@ -1239,7 +1257,7 @@ const App = (): ReactElement => {
                 <input
                   autoComplete="off"
                   className="text-input"
-                  disabled={state.isLoading}
+                  disabled={!canUseRepositorySelector}
                   id="repository-path"
                   onChange={(event) => setRepositoryPath(event.target.value)}
                   placeholder={t('pathPlaceholder')}
@@ -1248,7 +1266,7 @@ const App = (): ReactElement => {
                 />
                 <button
                   className="primary-button"
-                  disabled={state.isLoading}
+                  disabled={!canUseRepositorySelector || isOpeningRepository}
                   onClick={() => {
                     void openRepository();
                   }}
@@ -1282,7 +1300,7 @@ const App = (): ReactElement => {
                       <button
                         aria-selected={isSelected}
                         className={`repository-row${isSelected ? ' repository-row--selected' : ''}`}
-                        disabled={state.isLoading}
+                        disabled={!canUseRepositorySelector || isOpeningRepository}
                         key={repositoryPath}
                         onClick={() => switchRepository(repositoryPath)}
                         role="option"
@@ -1335,7 +1353,7 @@ const App = (): ReactElement => {
               <input
                 aria-label={t('labelWorktreeSearch')}
                 className="text-input source-list-search"
-                disabled={state.isLoading || state.worktrees.length === 0}
+                disabled={isBlockingOperation || state.worktrees.length === 0}
                 onChange={(event) =>
                   setState((current) => ({
                     ...current,
@@ -1356,7 +1374,7 @@ const App = (): ReactElement => {
                   <button
                     aria-selected={isSelected}
                     className={`worktree-row${isSelected ? ' worktree-row--selected' : ''}`}
-                    disabled={state.isLoading}
+                    disabled={isBlockingOperation || isRefreshingRepository}
                     key={worktree.id}
                     onClick={() => selectWorktree(worktree.path)}
                     role="option"
@@ -1532,7 +1550,7 @@ const App = (): ReactElement => {
                   {state.worktrees.map((worktree) => {
                     const isSelected = worktree.path === state.selectedWorktreePath;
                     const rowRemoveDisabled =
-                      !canRunRepositoryAction || worktree.isMainWorktree || worktree.isLocked || state.isLoading;
+                      !canRunRepositoryAction || worktree.isMainWorktree || worktree.isLocked || isBlockingOperation;
 
                     return (
                       <WorktreeOverviewRow
@@ -1643,7 +1661,7 @@ const App = (): ReactElement => {
                     <input
                       aria-label={t('commitSummaryLabel')}
                       className="commit-summary-input"
-                      disabled={state.isLoading}
+                      disabled={state.operation === 'commit'}
                       onChange={(event) =>
                         setState((current) => ({
                           ...current,
@@ -1659,7 +1677,7 @@ const App = (): ReactElement => {
                     <textarea
                       aria-label={t('commitDescriptionLabel')}
                       className="commit-description-input"
-                      disabled={state.isLoading}
+                      disabled={state.operation === 'commit'}
                       onChange={(event) =>
                         setState((current) => ({
                           ...current,
@@ -1684,7 +1702,7 @@ const App = (): ReactElement => {
                     <span>{getChangedFileSelectionLabel(selectedChangedFile, t('labelDiff'))}</span>
                   </header>
                   {state.isChangedFileDiffLoading ? (
-                    <div className="empty-inline">{t('changesDiffLoading')}</div>
+                    <LoadingPlaceholder label={t('changesDiffLoading')} />
                   ) : selectedChangedFile === null ? (
                     <div className="empty-state empty-state--large">{t('changesDiffPlaceholder')}</div>
                   ) : state.changedFileDiff.trim() === '' ? (
@@ -1792,7 +1810,7 @@ const App = (): ReactElement => {
                         <span>{state.commitFiles.length}</span>
                       </header>
                       {state.isHistoryDetailsLoading ? (
-                        <div className="empty-inline">{t('commitFileLoading')}</div>
+                        <LoadingPlaceholder label={t('commitFileLoading')} />
                       ) : state.commitFiles.length === 0 ? (
                         <div className="empty-inline">{state.historyDetailsMessage ?? t('commitEmptyFile')}</div>
                       ) : (
@@ -1814,7 +1832,7 @@ const App = (): ReactElement => {
                         <span>{state.selectedCommitFilePath || t('labelDiff')}</span>
                       </header>
                       {state.isHistoryDetailsLoading ? (
-                        <div className="empty-inline">{t('changesDiffLoading')}</div>
+                        <LoadingPlaceholder label={t('changesDiffLoading')} />
                       ) : state.commitDiff.trim() === '' ? (
                         <div className="empty-inline">{state.historyDetailsMessage ?? t('commitNoFileDiff')}</div>
                       ) : (

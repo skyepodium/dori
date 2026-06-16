@@ -150,6 +150,7 @@ Required states:
 ## Interaction Rules
 
 - Loading: show the command in progress without blocking unrelated read-only navigation when safe.
+- Background refresh: repository refresh, worktree switching, and detail loading should preserve the existing layout and avoid broad “loading” banners or text swaps that make the app feel like it is flickering.
 - Empty: no repository, no changes, no history, and no extra worktrees need distinct messages.
 - Clean working tree: after commit, the changes view must show a clear clean state with a title and supporting text.
 - Selectors: repository inventory lives in a filtered dropdown with internal scrolling.
