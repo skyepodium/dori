@@ -214,6 +214,54 @@ h2 {
   min-height: var(--size-empty-state-min-height);
 }
 
+.empty-state--complete {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 78%), rgb(255 255 255 / 46%)),
+    var(--color-surface);
+  border-style: solid;
+  flex-direction: column;
+  gap: var(--space-8);
+  text-align: center;
+}
+
+.empty-state__title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+}
+
+.empty-state__body {
+  max-width: 430px;
+}
+
+.fatal-error-view {
+  align-items: center;
+  background: var(--color-app-background);
+  display: flex;
+  min-height: 100vh;
+  padding: var(--space-24);
+}
+
+.fatal-error-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-popover);
+  margin: 0 auto;
+  max-width: 520px;
+  padding: var(--space-24);
+}
+
+.fatal-error-card h1 {
+  font-size: var(--font-size-xl);
+  margin: 0 0 var(--space-8);
+}
+
+.fatal-error-card p {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
 .repository-list,
 .worktree-list {
   display: flex;

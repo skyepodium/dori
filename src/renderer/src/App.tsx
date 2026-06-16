@@ -3,12 +3,14 @@ import type { AppIpcResult, GitClientApi } from '../../shared/constants/ipc';
 import type { GitChangedFile, GitCommit, GitDiffScope, GitFileChange, GitStatus, Worktree } from '../../shared/types';
 import {
   DEFAULT_LANGUAGE,
+  formatCommitActionLabel,
   LANGUAGE_STORAGE_KEY,
   isLanguage,
   translate,
   type Language,
   type TranslationKey
 } from './i18n';
+import { unwrapIpcResult } from './ipcResult';
 
 type ActiveTab = 'worktrees' | 'changes' | 'history';
 type DialogMode = 'create' | 'remove' | null;
@@ -146,16 +148,6 @@ const getGitApi = (): GitClientApi | null => {
   const gitWindow = window as WindowGitClientShape;
 
   return gitWindow.gitClient?.git ?? null;
-};
-
-const unwrapIpcResult = async <T,>(resultPromise: Promise<AppIpcResult<T>>): Promise<T> => {
-  const result = await resultPromise;
-
-  if (result.ok) {
-    return result.data;
-  }
-
-  throw new Error(result.error.message);
 };
 
 const getRepositoryName = (repositoryPath: string): string => {
@@ -717,6 +709,7 @@ const App = (): ReactElement => {
   const canRunWorktreeAction = canRunRepositoryAction && hasSelectedWorktree;
   const commitMessage = [state.commitSummary.trim(), state.commitDescription.trim()].filter(Boolean).join('\n\n');
   const commitTargetBranch = status.currentBranch || selectedWorktree?.branch || t('labelCurrentBranch');
+  const commitActionLabel = formatCommitActionLabel(state.language, dirtyFileCount, commitTargetBranch);
   const commitDisabled =
     !canRunWorktreeAction ||
     selectedWorktree?.isLocked === true ||
@@ -1548,7 +1541,10 @@ const App = (): ReactElement => {
             {!hasSelectedWorktree ? (
               <div className="empty-state empty-state--large">{t('emptySelectWorkspaceForChanges')}</div>
             ) : dirtyFileCount === 0 ? (
-              <div className="empty-state empty-state--large">{t('changesNoLocalChanges')}</div>
+              <div className="empty-state empty-state--large empty-state--complete">
+                <span className="empty-state__title">{t('changesNoLocalChanges')}</span>
+                <span className="empty-state__body">{t('changesNoLocalChangesDetail')}</span>
+              </div>
             ) : (
               <div className="changes-layout">
                 <div className="changes-sidebar">
@@ -1635,7 +1631,7 @@ const App = (): ReactElement => {
                     <button className="commit-action-button" disabled={commitDisabled} type="submit">
                       {state.operation === 'commit'
                         ? t('commitWorking')
-                        : `Commit ${dirtyFileCount} files to ${commitTargetBranch}`}
+                        : commitActionLabel}
                     </button>
                   </form>
                 </div>

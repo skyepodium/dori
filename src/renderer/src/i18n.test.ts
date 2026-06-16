@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LANGUAGE, isLanguage, translate, type TranslationKey } from './i18n';
+import { DEFAULT_LANGUAGE, formatCommitActionLabel, isLanguage, translate, type TranslationKey } from './i18n';
 
 const TRANSLATION_KEYS: TranslationKey[] = [
   'labelRepository',
@@ -25,5 +25,10 @@ describe('renderer i18n', () => {
     expect(isLanguage(DEFAULT_LANGUAGE)).toBe(true);
     expect(isLanguage('fr')).toBe(false);
     expect(isLanguage(null)).toBe(false);
+  });
+
+  it('formats commit action labels in the active language', () => {
+    expect(formatCommitActionLabel('en', 3, 'main')).toBe('Commit 3 files to main');
+    expect(formatCommitActionLabel('ko', 3, 'main')).toBe('main에 파일 3개 커밋');
   });
 });

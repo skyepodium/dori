@@ -73,9 +73,11 @@
 
 - Loading: show repository/worktree command in progress without blocking unrelated read-only navigation when safe.
 - Empty: no repository, no changes, no history, and no extra worktrees each need distinct empty states.
+- Empty states must never read as a blank white canvas after an operation. After commit, the changes view shows a clear clean-working-tree state with title and supporting copy.
 - Selectors: repository inventory lives inside a filtered dropdown menu with internal scrolling so large local inventories do not stretch the sidebar.
 - Worktrees: active repository worktrees stay visible in a filtered source list because branch/workspace switching is the core workflow.
 - Error: Git command failures should show command intent and user-actionable message, not raw stack traces.
+- Crash safety: renderer exceptions should fall back to a localized error boundary instead of an all-white window.
 - Success: successful mutations should refresh state and use subtle confirmation.
 - Disabled: disabled commands need visible reason through label, tooltip, or nearby status text.
 - Commit: changes view keeps summary, description, and commit action adjacent to the changed-file list; until explicit staging controls exist, the commit action stages all current worktree changes before creating the commit.

@@ -84,6 +84,8 @@
 - 카드 안에 카드를 중첩하지 않는다. 반복 항목, 모달, 도구 패널처럼 실제로 프레임이 필요한 곳에만 card 패턴을 사용한다.
 - renderer의 사용자-facing 텍스트는 `/Users/skyepodium/dev/dori/src/renderer/src/i18n.ts`의 translation key로 관리한다. JSX, aria-label, title, placeholder, error/success message에 한국어 또는 영어 문장을 직접 넣지 않는다.
 - 언어 추가나 문구 변경 시 모든 지원 언어의 key parity를 테스트로 확인한다.
+- IPC 응답은 renderer에서 직접 구조 접근하지 않고 `/Users/skyepodium/dev/dori/src/renderer/src/ipcResult.ts` 같은 공통 unwrap/validation 유틸을 통해 처리한다. 비정상 응답도 화면을 죽이지 않고 사용자-facing 오류로 바뀌어야 한다.
+- root renderer는 error boundary를 유지한다. 예외가 발생해도 Electron 창 전체가 흰 화면이 되면 안 된다.
 - 저장소 선택은 많은 항목을 고려해 dropdown/filter 패턴을 쓰고, worktree 선택은 빠른 전환을 위해 source-list 패턴을 우선한다. worktree를 숨기는 UI는 명확한 보조 목적일 때만 사용한다.
 
 ## 디자인 토큰 시스템

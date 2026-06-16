@@ -26,6 +26,7 @@ const TRANSLATIONS = {
     commonNoFiles: 'No files',
     changesNoDiff: 'No diff to display.',
     changesNoLocalChanges: 'This workspace has no local changes.',
+    changesNoLocalChangesDetail: 'Your working tree is clean. New edits will appear here automatically after refresh.',
     changesStaged: 'Staged',
     changesUnstaged: 'Unstaged',
     changesUntracked: 'Untracked',
@@ -68,6 +69,8 @@ const TRANSLATIONS = {
     errorCommitUnavailable: 'Commit is not available yet.',
     errorGitApiUnavailable: 'Git features are not available yet.',
     errorGitCommandFailed: 'Git command failed. Check the repository path and try again.',
+    errorRendererCrashed: 'The interface hit an unexpected error.',
+    errorRendererCrashedDetail: 'Refresh the repository or reopen the window. The Git operation result was preserved by Git.',
     historyChangedFilesAndDiff: 'Selected commit changed files and diff',
     historyCommitList: 'Commit list',
     historyFileDiff: 'File diff',
@@ -149,6 +152,7 @@ const TRANSLATIONS = {
     commonNoFiles: '파일 없음',
     changesNoDiff: '표시할 diff가 없습니다.',
     changesNoLocalChanges: '이 워크스페이스에는 로컬 변경 사항이 없습니다.',
+    changesNoLocalChangesDetail: '작업 트리가 깨끗합니다. 새 변경 사항은 새로고침 후 여기에 표시됩니다.',
     changesStaged: '스테이지됨',
     changesUnstaged: '스테이지 안 됨',
     changesUntracked: '추적 안 됨',
@@ -191,6 +195,8 @@ const TRANSLATIONS = {
     errorCommitUnavailable: 'Commit을 아직 사용할 수 없습니다.',
     errorGitApiUnavailable: 'Git 기능을 아직 사용할 수 없습니다.',
     errorGitCommandFailed: 'Git 명령에 실패했습니다. 저장소 경로를 확인한 뒤 다시 시도하세요.',
+    errorRendererCrashed: '화면 처리 중 예상치 못한 오류가 발생했습니다.',
+    errorRendererCrashedDetail: '저장소를 새로고침하거나 창을 다시 여세요. Git 작업 결과는 Git에 보존됩니다.',
     historyChangedFilesAndDiff: '선택한 커밋 변경 파일과 diff',
     historyCommitList: '커밋 목록',
     historyFileDiff: '파일 diff',
@@ -259,3 +265,11 @@ export const LANGUAGE_STORAGE_KEY = 'interfaceLanguage';
 export const isLanguage = (value: unknown): value is Language => value === 'en' || value === 'ko';
 
 export const translate = (language: Language, key: TranslationKey): TranslationValue => TRANSLATIONS[language][key];
+
+export const formatCommitActionLabel = (language: Language, fileCount: number, branchName: string): string => {
+  if (language === 'ko') {
+    return `${branchName}에 파일 ${fileCount}개 커밋`;
+  }
+
+  return `Commit ${fileCount} files to ${branchName}`;
+};
