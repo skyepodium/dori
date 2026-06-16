@@ -873,11 +873,48 @@ h2 {
   color: var(--color-text-primary);
   display: grid;
   gap: var(--space-12);
-  grid-template-columns: var(--size-history-sha-column-width) minmax(0, 1fr) minmax(var(--size-history-meta-min-width), auto);
-  min-height: 38px;
+  grid-template-columns: var(--size-avatar-history-column-width) var(--size-history-sha-column-width) minmax(0, 1fr) minmax(var(--size-history-meta-min-width), auto);
+  min-height: 42px;
   padding: 0 var(--space-12);
   text-align: left;
   width: 100%;
+}
+
+.git-avatar {
+  align-items: center;
+  background: linear-gradient(180deg, var(--color-surface-raised), var(--color-surface-subtle));
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-weight: 700;
+  justify-content: center;
+  overflow: hidden;
+  user-select: none;
+}
+
+.git-avatar--compact {
+  font-size: var(--font-size-xs);
+  height: var(--size-avatar-compact);
+  width: var(--size-avatar-compact);
+}
+
+.git-avatar--regular {
+  font-size: var(--font-size-xs);
+  height: var(--size-avatar-regular);
+  width: var(--size-avatar-regular);
+}
+
+.git-avatar__image {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.git-avatar__fallback {
+  line-height: 1;
 }
 
 .history-row:hover:not(:disabled),

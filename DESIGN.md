@@ -97,6 +97,7 @@ Avoid:
 - Shape: restrained radius, hairline borders, selected row tint, and shallow elevation for menus and dialogs.
 - Motion: minimal and fast; only use motion to clarify transitions.
 - Iconography: use icons when they improve scan speed for Git actions and status. Do not use icons as decoration.
+- Avatars: commit author identity can use Gravatar images derived from Git author email, with local initials fallback for privacy, offline, or missing-image cases.
 
 ## Layout
 
@@ -116,6 +117,7 @@ Core components:
 - Worktree source list
 - Workspace header
 - Status pill
+- Author avatar
 - Command toolbar
 - Tab bar
 - Worktree overview row

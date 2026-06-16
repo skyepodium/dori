@@ -10,6 +10,7 @@ import {
   type Language,
   type TranslationKey
 } from './i18n';
+import { GitAvatar } from './GitAvatar';
 import { unwrapIpcResult } from './ipcResult';
 
 type ActiveTab = 'worktrees' | 'changes' | 'history';
@@ -1675,6 +1676,12 @@ const App = (): ReactElement => {
                           onClick={() => selectCommit(commit.sha)}
                           type="button"
                         >
+                          <GitAvatar
+                            authorEmail={commit.authorEmail}
+                            authorName={commit.authorName}
+                            label={`${t('labelAuthorAvatar')}: ${commit.authorName}`}
+                            size="compact"
+                          />
                           <span className="history-row__sha">{commit.shortSha}</span>
                           <span className="history-row__subject">{commit.subject}</span>
                           <span className="history-row__meta">
@@ -1688,6 +1695,14 @@ const App = (): ReactElement => {
 
                 <section className="history-detail" aria-label={t('historyChangedFilesAndDiff')}>
                   <header className="history-detail__header">
+                    {selectedCommit !== null ? (
+                      <GitAvatar
+                        authorEmail={selectedCommit.authorEmail}
+                        authorName={selectedCommit.authorName}
+                        label={`${t('labelAuthorAvatar')}: ${selectedCommit.authorName}`}
+                        size="regular"
+                      />
+                    ) : null}
                     <div className="history-detail__title">
                       <h2>{selectedCommit?.subject ?? t('commitSelectCommit')}</h2>
                       {selectedCommit !== null ? (

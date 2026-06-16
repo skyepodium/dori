@@ -4,6 +4,7 @@ import { DEFAULT_LANGUAGE, formatCommitActionLabel, isLanguage, translate, type 
 const TRANSLATION_KEYS: TranslationKey[] = [
   'labelRepository',
   'labelWorktree',
+  'labelAuthorAvatar',
   'tabChanges',
   'tabHistory',
   'tabWorktrees',
