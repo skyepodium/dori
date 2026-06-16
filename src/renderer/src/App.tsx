@@ -440,12 +440,6 @@ const App = (): ReactElement => {
     <main className="app-shell">
       <aside className="sidebar" aria-label="저장소와 worktree 탐색">
         <section className="repository-panel">
-          <div className="brand-row">
-            <div>
-              <h1>Dori</h1>
-            </div>
-          </div>
-
           <label className="field-label" htmlFor="repository-path">
             저장소 경로
           </label>
@@ -462,7 +456,7 @@ const App = (): ReactElement => {
             />
             <button
               className="primary-button"
-              disabled={!hasGitApi || state.repositoryPath.trim() === '' || state.isLoading}
+              disabled={!hasGitApi || state.isLoading}
               onClick={openRepository}
               title={hasGitApi ? '저장소 경로 열기' : 'Preload Git API 대기 중'}
               type="button"

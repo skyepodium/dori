@@ -68,7 +68,6 @@ input:focus-visible {
   min-height: 0;
 }
 
-.brand-row,
 .section-title-row,
 .workspace-header,
 .dialog__header,
@@ -80,7 +79,6 @@ input:focus-visible {
   display: flex;
 }
 
-.brand-row,
 .section-title-row,
 .workspace-header,
 .dialog__header,
@@ -88,20 +86,9 @@ input:focus-visible {
   justify-content: space-between;
 }
 
-.brand-row {
-  gap: var(--space-12);
-  margin-bottom: var(--space-16);
-}
-
-h1,
 h2,
 p {
   margin: 0;
-}
-
-h1 {
-  font-size: var(--font-size-lg);
-  line-height: var(--line-height-tight);
 }
 
 h2 {
@@ -109,7 +96,6 @@ h2 {
   line-height: var(--line-height-tight);
 }
 
-.brand-row p,
 .dialog__header p,
 .hint-text,
 .eyebrow,
