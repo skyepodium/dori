@@ -8,6 +8,7 @@ import type {
   GitChangedFile,
   GitCommit,
   GitFileDiff,
+  GitIdentity,
   GitStatus,
   GitWorkingTreeDiff,
   Repository,
@@ -54,6 +55,7 @@ const createGitService = () => ({
   createWorktree: async (): Promise<void> => undefined,
   removeWorktree: async (): Promise<void> => undefined,
   getStatus: async (): Promise<GitStatus> => EMPTY_STATUS,
+  getIdentity: async (_worktreePath: string): Promise<GitIdentity> => ({ name: 'Ada Lovelace', email: 'ada@example.com' }),
   getHistory: async (): Promise<GitCommit[]> => [],
   getCommitFiles: async (): Promise<GitChangedFile[]> => [],
   getCommitFileDiff: async (): Promise<GitFileDiff> => ({
@@ -213,6 +215,34 @@ describe('registerGitIpcHandlers', () => {
         diffScope: 'unstaged'
       }
     ]);
+  });
+
+  it('forwards Git identity requests', async () => {
+    const calls: string[] = [];
+    const gitService = {
+      ...createGitService(),
+      getIdentity: async (worktreePath: string): Promise<GitIdentity> => {
+        calls.push(worktreePath);
+        return { name: 'Ada Lovelace', email: 'ada@example.com' };
+      }
+    };
+    const handlers = registerHandlers(gitService);
+    const handler = handlers.get(IPC_CHANNELS.GIT_GET_IDENTITY);
+
+    expect(handler).toBeDefined();
+
+    if (handler === undefined) {
+      return;
+    }
+
+    await expect(invoke(handler, { worktreePath: '/repo' })).resolves.toEqual({
+      ok: true,
+      data: {
+        name: 'Ada Lovelace',
+        email: 'ada@example.com'
+      }
+    });
+    expect(calls).toEqual(['/repo']);
   });
 
   it('rejects changed file diff requests with an invalid scope', async () => {

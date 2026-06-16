@@ -57,6 +57,11 @@ export interface GitStatus {
   conflicts: GitFileChange[];
 }
 
+export interface GitIdentity {
+  name: string;
+  email: string;
+}
+
 export interface GitCommit {
   sha: string;
   shortSha: string;

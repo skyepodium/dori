@@ -725,6 +725,38 @@ h2 {
   padding: var(--space-10);
 }
 
+.commit-author-row {
+  align-items: center;
+  display: grid;
+  gap: var(--space-8);
+  grid-template-columns: var(--size-avatar-regular) minmax(0, 1fr);
+  min-width: 0;
+}
+
+.commit-author-row__text {
+  display: flex;
+  flex-direction: column;
+  line-height: var(--line-height-tight);
+  min-width: 0;
+}
+
+.commit-author-row__name,
+.commit-author-row__email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commit-author-row__name {
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+.commit-author-row__email {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
 .commit-summary-input,
 .commit-description-input {
   background: var(--color-surface-raised);

@@ -29,6 +29,9 @@ const gitApi: GitClientApi = {
   getStatus: (worktreePath) => {
     return ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_STATUS, { worktreePath });
   },
+  getIdentity: (worktreePath) => {
+    return ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_IDENTITY, { worktreePath });
+  },
   getHistory: (worktreePath, limit) => {
     return ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_HISTORY, { worktreePath, limit });
   },

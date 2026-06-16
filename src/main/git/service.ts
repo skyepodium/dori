@@ -8,6 +8,7 @@ import type {
   GitCommitFile,
   GitDiffScope,
   GitFileDiff,
+  GitIdentity,
   GitStatus,
   GitWorkingTreeDiff,
   Repository,
@@ -306,6 +307,18 @@ export class GitService {
     }
 
     return parseHistory(output);
+  };
+
+  public readonly getIdentity = async (worktreePath: string): Promise<GitIdentity> => {
+    const [name, email] = await Promise.all([
+      this.run(['config', '--get', 'user.name'], { cwd: worktreePath }),
+      this.run(['config', '--get', 'user.email'], { cwd: worktreePath })
+    ]);
+
+    return {
+      name: name.trim(),
+      email: email.trim()
+    };
   };
 
   public readonly getCommitFiles = async (worktreePath: string, commitSha: string): Promise<GitCommitFile[]> => {

@@ -3,6 +3,7 @@ import type {
   GitChangedFile,
   GitCommit,
   GitDiffScope,
+  GitIdentity,
   GitStatus,
   GitWorkingTreeDiff,
   Repository,
@@ -16,6 +17,7 @@ export const IPC_CHANNELS = Object.freeze({
   GIT_CREATE_WORKTREE: 'git:create-worktree',
   GIT_REMOVE_WORKTREE: 'git:remove-worktree',
   GIT_GET_STATUS: 'git:get-status',
+  GIT_GET_IDENTITY: 'git:get-identity',
   GIT_GET_HISTORY: 'git:get-history',
   GIT_GET_COMMIT_FILES: 'git:get-commit-files',
   GIT_GET_COMMIT_FILE_DIFF: 'git:get-commit-file-diff',
@@ -70,6 +72,7 @@ export type GitClientApi = {
     force?: boolean
   ) => Promise<AppIpcResult<GitCommandResult>>;
   getStatus: (worktreePath: string) => Promise<AppIpcResult<GitStatus>>;
+  getIdentity: (worktreePath: string) => Promise<AppIpcResult<GitIdentity>>;
   getHistory: (
     worktreePath: string,
     limit?: number

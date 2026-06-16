@@ -114,6 +114,33 @@ describe('GitService', () => {
     ]);
   });
 
+  it('reads the configured Git identity for commits', async () => {
+    const calls: Array<{ args: string[]; cwd?: string }> = [];
+    const runner: GitRunner = async (args, options) => {
+      calls.push({ args, cwd: options?.cwd });
+
+      if (args.join(' ') === 'config --get user.name') {
+        return 'Ada Lovelace\n';
+      }
+
+      if (args.join(' ') === 'config --get user.email') {
+        return 'ada@example.com\n';
+      }
+
+      return '';
+    };
+    const service = new GitService(runner);
+
+    await expect(service.getIdentity('/repo')).resolves.toEqual({
+      name: 'Ada Lovelace',
+      email: 'ada@example.com'
+    });
+    expect(calls).toEqual([
+      { cwd: '/repo', args: ['config', '--get', 'user.name'] },
+      { cwd: '/repo', args: ['config', '--get', 'user.email'] }
+    ]);
+  });
+
   it('returns changed files for a commit', async () => {
     const calls: Array<{ args: string[]; cwd?: string }> = [];
     const runner: GitRunner = async (args, options) => {

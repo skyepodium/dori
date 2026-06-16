@@ -5,6 +5,7 @@ const TRANSLATION_KEYS: TranslationKey[] = [
   'labelRepository',
   'labelWorktree',
   'labelAuthorAvatar',
+  'commitIdentityMissing',
   'tabChanges',
   'tabHistory',
   'tabWorktrees',

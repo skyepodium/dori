@@ -1,6 +1,14 @@
 import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import type { AppIpcResult, GitClientApi } from '../../shared/constants/ipc';
-import type { GitChangedFile, GitCommit, GitDiffScope, GitFileChange, GitStatus, Worktree } from '../../shared/types';
+import type {
+  GitChangedFile,
+  GitCommit,
+  GitDiffScope,
+  GitFileChange,
+  GitIdentity,
+  GitStatus,
+  Worktree
+} from '../../shared/types';
 import {
   DEFAULT_LANGUAGE,
   formatCommitActionLabel,
@@ -47,6 +55,7 @@ type RepositoryViewState = {
   repositoryPath: string;
   worktrees: Worktree[];
   selectedWorktreePath: string;
+  identity: GitIdentity | null;
   status: GitStatus | null;
   selectedChangedFilePath: string;
   selectedChangedFileScope: GitDiffScope | '';
@@ -96,6 +105,7 @@ const INITIAL_STATE: AppState = {
   repositoryPath: '',
   worktrees: [],
   selectedWorktreePath: '',
+  identity: null,
   status: null,
   selectedChangedFilePath: '',
   selectedChangedFileScope: '',
@@ -322,9 +332,10 @@ const readWorktreeDetails = async (
   gitApi: GitClientApi,
   worktreePath: string,
   t: (key: TranslationKey) => string
-): Promise<Pick<RepositoryViewState, 'status' | 'selectedChangedFilePath' | 'selectedChangedFileScope' | 'changedFileDiff' | 'changesDetailsMessage' | 'history' | 'selectedCommitSha' | 'commitFiles' | 'selectedCommitFilePath' | 'commitDiff' | 'historyDetailsMessage'>> => {
+): Promise<Pick<RepositoryViewState, 'identity' | 'status' | 'selectedChangedFilePath' | 'selectedChangedFileScope' | 'changedFileDiff' | 'changesDetailsMessage' | 'history' | 'selectedCommitSha' | 'commitFiles' | 'selectedCommitFilePath' | 'commitDiff' | 'historyDetailsMessage'>> => {
   if (worktreePath.trim().length === 0) {
     return {
+      identity: null,
       status: null,
       selectedChangedFilePath: '',
       selectedChangedFileScope: '',
@@ -339,7 +350,8 @@ const readWorktreeDetails = async (
     };
   }
 
-  const [status, history] = await Promise.all([
+  const [identity, status, history] = await Promise.all([
+    unwrapIpcResult(gitApi.getIdentity(worktreePath)),
     unwrapIpcResult(gitApi.getStatus(worktreePath)),
     unwrapIpcResult(gitApi.getHistory(worktreePath, HISTORY_LIMIT_COUNT))
   ]);
@@ -356,6 +368,7 @@ const readWorktreeDetails = async (
       : await readCommitDetails(gitApi, worktreePath, selectedCommitSha, '', t);
 
   return {
+    identity,
     status,
     selectedChangedFilePath: '',
     selectedChangedFileScope: '',
@@ -1598,6 +1611,18 @@ const App = (): ReactElement => {
                       }
                     }}
                   >
+                    <div className="commit-author-row">
+                      <GitAvatar
+                        authorEmail={state.identity?.email ?? ''}
+                        authorName={state.identity?.name ?? ''}
+                        label={`${t('labelAuthorAvatar')}: ${state.identity?.name ?? t('commonNone')}`}
+                        size="regular"
+                      />
+                      <div className="commit-author-row__text">
+                        <span className="commit-author-row__name">{state.identity?.name || t('commonNone')}</span>
+                        <span className="commit-author-row__email">{state.identity?.email || t('commitIdentityMissing')}</span>
+                      </div>
+                    </div>
                     <input
                       aria-label={t('commitSummaryLabel')}
                       className="commit-summary-input"

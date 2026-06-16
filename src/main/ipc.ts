@@ -11,6 +11,7 @@ import type {
   GitChangedFile,
   GitCommit,
   GitDiffScope,
+  GitIdentity,
   GitStatus,
   GitWorkingTreeDiff,
   Repository,
@@ -32,6 +33,7 @@ type GitServiceApi = {
     force?: boolean
   ) => Promise<GitCommandResult | void>;
   getStatus: (worktreePath: string) => Promise<GitStatus>;
+  getIdentity: (worktreePath: string) => Promise<GitIdentity>;
   getHistory: (worktreePath: string, limit?: number) => Promise<GitCommit[]>;
   getCommitFiles: (worktreePath: string, commitSha: string) => Promise<GitChangedFile[]>;
   getCommitFileDiff: (worktreePath: string, commitSha: string, filePath: string) => Promise<GitCommandResult>;
@@ -219,6 +221,10 @@ export const registerGitIpcHandlers = (ipcMain: IpcMainHandleRegistry, gitServic
 
   registerHandler(ipcMain, IPC_CHANNELS.GIT_GET_STATUS, async (payload) => {
     return gitService.getStatus(readRequiredString(payload, 'worktreePath'));
+  });
+
+  registerHandler(ipcMain, IPC_CHANNELS.GIT_GET_IDENTITY, async (payload) => {
+    return gitService.getIdentity(readRequiredString(payload, 'worktreePath'));
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.GIT_GET_HISTORY, async (payload) => {
