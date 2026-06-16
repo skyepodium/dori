@@ -60,7 +60,6 @@ const TRANSLATIONS = {
     emptyNoWorktrees: 'No worktrees were found for this repository.',
     emptyOpenLocalRepository: 'Open a local Git repository',
     emptyNoFilteredRepositories: 'No repositories match this filter.',
-    emptyNoFilteredWorktrees: 'No worktrees match this filter.',
     emptySelectRepository: 'Select repository',
     emptySelectWorkspace: 'Select a workspace',
     emptySelectWorkspaceForChanges: 'Select a workspace to view changes.',
@@ -87,7 +86,6 @@ const TRANSLATIONS = {
     labelSelected: 'Selected',
     labelSyncActions: 'Sync actions',
     labelWorktree: 'Worktree',
-    labelWorktreeSearch: 'Filter worktrees',
     labelWorkspaceViews: 'Workspace views',
     languageEnglish: 'EN',
     languageKorean: 'KO',
@@ -128,7 +126,6 @@ const TRANSLATIONS = {
     worktreeCurrentSelection: 'Current selection',
     worktreeCount: 'worktrees',
     worktreeList: 'Worktree selection',
-    worktreeFilterPlaceholder: 'Filter worktrees',
     worktreeOverview: 'Repository worktrees'
   },
   ko: {
@@ -188,7 +185,6 @@ const TRANSLATIONS = {
     emptyNoWorktrees: '이 저장소에서 worktree를 찾지 못했습니다.',
     emptyOpenLocalRepository: '로컬 Git 저장소 열기',
     emptyNoFilteredRepositories: '필터와 일치하는 저장소가 없습니다.',
-    emptyNoFilteredWorktrees: '필터와 일치하는 worktree가 없습니다.',
     emptySelectRepository: '저장소 선택',
     emptySelectWorkspace: '워크스페이스를 선택하세요',
     emptySelectWorkspaceForChanges: '변경 사항을 보려면 워크스페이스를 선택하세요.',
@@ -215,7 +211,6 @@ const TRANSLATIONS = {
     labelSelected: '선택됨',
     labelSyncActions: '동기화 작업',
     labelWorktree: '워크트리',
-    labelWorktreeSearch: 'Worktree 필터',
     labelWorkspaceViews: '워크스페이스 보기',
     languageEnglish: 'EN',
     languageKorean: 'KO',
@@ -256,7 +251,6 @@ const TRANSLATIONS = {
     worktreeCurrentSelection: '현재 선택',
     worktreeCount: '개 worktree',
     worktreeList: 'Worktree 선택',
-    worktreeFilterPlaceholder: 'Worktree 필터',
     worktreeOverview: '저장소 worktree 목록'
   }
 } as const;

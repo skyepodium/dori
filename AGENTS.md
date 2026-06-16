@@ -94,6 +94,7 @@ When rules conflict, the narrower scoped `AGENTS.md` wins. When changing a rule,
 - When adding or changing copy, keep English and Korean key parity covered by tests.
 - Repository selection uses a dropdown with filtering and internal scrolling for large local inventories.
 - Worktree selection uses an always-visible source list because switching workspaces is a core workflow.
+- Do not add a secondary worktree filter input unless the interaction is redesigned and documented in `/Users/skyepodium/dev/dori/DESIGN.md`.
 - Do not hide worktrees behind a dropdown unless the dropdown is secondary to an always-visible primary worktree navigation.
 - Read-only refresh, worktree switching, and detail loading must preserve the existing screen structure. Avoid broad loading banners, text swaps, or global disabled states unless a mutation or destructive command is actively running.
 

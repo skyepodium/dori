@@ -154,7 +154,7 @@ Required states:
 - Empty: no repository, no changes, no history, and no extra worktrees need distinct messages.
 - Clean working tree: after commit, the changes view must show a clear clean state with a title and supporting text.
 - Selectors: repository inventory lives in a filtered dropdown with internal scrolling.
-- Worktrees: active repository worktrees stay visible in a filtered source list.
+- Worktrees: active repository worktrees stay visible in a direct source list without a secondary filter field.
 - Errors: Git command failures should show command intent and user-actionable copy, not raw stack traces.
 - Crash safety: renderer exceptions fall back to a localized error boundary instead of an all-white window.
 - Success: mutations refresh state and use subtle confirmation.

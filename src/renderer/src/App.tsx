@@ -78,7 +78,6 @@ type AppState = RepositoryViewState & {
   dialogMode: DialogMode;
   repositoryMenuOpen: boolean;
   repositoryFilter: string;
-  worktreeFilter: string;
   isLoading: boolean;
   isChangedFileDiffLoading: boolean;
   isHistoryDetailsLoading: boolean;
@@ -126,7 +125,6 @@ const INITIAL_STATE: AppState = {
   dialogMode: null,
   repositoryMenuOpen: false,
   repositoryFilter: '',
-  worktreeFilter: '',
   isLoading: false,
   isChangedFileDiffLoading: false,
   isHistoryDetailsLoading: false,
@@ -731,17 +729,6 @@ const App = (): ReactElement => {
 
     return state.recentRepositories.filter((repositoryPath) => repositoryPath.toLowerCase().includes(query));
   }, [state.recentRepositories, state.repositoryFilter]);
-  const filteredWorktrees = useMemo(() => {
-    const query = state.worktreeFilter.trim().toLowerCase();
-
-    if (query === '') {
-      return state.worktrees;
-    }
-
-    return state.worktrees.filter(
-      (worktree) => worktree.branch.toLowerCase().includes(query) || worktree.path.toLowerCase().includes(query)
-    );
-  }, [state.worktreeFilter, state.worktrees]);
   const status = state.status ?? EMPTY_STATUS;
   const hasRepository = state.repositoryPath.trim() !== '';
   const hasGitApi = gitApi !== null;
@@ -1350,23 +1337,8 @@ const App = (): ReactElement => {
 
           {hasRepository ? (
             <div className="source-list-panel">
-              <input
-                aria-label={t('labelWorktreeSearch')}
-                className="text-input source-list-search"
-                disabled={isBlockingOperation || state.worktrees.length === 0}
-                onChange={(event) =>
-                  setState((current) => ({
-                    ...current,
-                    worktreeFilter: event.target.value
-                  }))
-                }
-                placeholder={t('worktreeFilterPlaceholder')}
-                type="search"
-                value={state.worktreeFilter}
-              />
-
               <div aria-label={t('worktreeList')} className="worktree-list" role="listbox">
-              {filteredWorktrees.map((worktree) => {
+              {state.worktrees.map((worktree) => {
                 const isSelected = worktree.path === state.selectedWorktreePath;
                 const tone = worktree.isLocked ? 'locked' : worktree.hasChanges ? 'warning' : 'neutral';
 
@@ -1392,11 +1364,7 @@ const App = (): ReactElement => {
                   </button>
                 );
               })}
-              {filteredWorktrees.length === 0 ? (
-                <div className="empty-inline">
-                  {state.worktrees.length === 0 ? t('emptyNoWorktrees') : t('emptyNoFilteredWorktrees')}
-                </div>
-              ) : null}
+              {state.worktrees.length === 0 ? <div className="empty-inline">{t('emptyNoWorktrees')}</div> : null}
             </div>
             </div>
           ) : null}
