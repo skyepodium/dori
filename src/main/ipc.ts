@@ -180,7 +180,7 @@ const registerHandler = <T>(ipcMain: IpcMainHandleRegistry, channel: string, han
 export const registerGitIpcHandlers = (ipcMain: IpcMainHandleRegistry, gitService: GitServiceApi): void => {
   registerHandler<DirectorySelectionResult>(ipcMain, IPC_CHANNELS.GIT_SELECT_REPOSITORY_DIRECTORY, async () => {
     const selection = await dialog.showOpenDialog({
-      title: '저장소 폴더 선택',
+      title: 'Select repository folder / 저장소 폴더 선택',
       properties: ['openDirectory']
     });
 
