@@ -36,6 +36,7 @@ const createRepository = (path: string): Repository => ({
   path,
   name: 'repo',
   currentBranch: 'main',
+  ownerLogin: 'skyepodium',
   ownerAvatarUrl: 'https://github.com/skyepodium.png?size=64'
 });
 

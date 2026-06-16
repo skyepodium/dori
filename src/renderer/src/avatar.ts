@@ -28,6 +28,36 @@ export const createGravatarAvatarUrl = async (email: string, sizePx: number): Pr
   return `${GRAVATAR_AVATAR_BASE_URL}/${hash}?s=${sizePx}&d=404`;
 };
 
+export const getRepositoryOwnerAvatarUrlForAuthor = ({
+  authorEmail,
+  authorName,
+  identityEmail,
+  repositoryOwnerAvatarUrl,
+  repositoryOwnerLogin
+}: {
+  authorEmail: string;
+  authorName: string;
+  identityEmail: string | null;
+  repositoryOwnerAvatarUrl: string | null;
+  repositoryOwnerLogin: string | null;
+}): string | null => {
+  if (repositoryOwnerAvatarUrl === null) {
+    return null;
+  }
+
+  const normalizedAuthorEmail = normalizeAvatarEmail(authorEmail);
+  const normalizedOwnerLogin = repositoryOwnerLogin?.trim().toLowerCase() ?? '';
+  const authorNameMatchesOwner = normalizedOwnerLogin !== '' && authorName.trim().toLowerCase() === normalizedOwnerLogin;
+  const authorEmailMatchesOwner =
+    normalizedOwnerLogin !== '' && normalizedAuthorEmail.split('@')[0] === normalizedOwnerLogin;
+  const authorEmailMatchesIdentity =
+    identityEmail !== null && normalizedAuthorEmail === normalizeAvatarEmail(identityEmail);
+
+  return authorEmailMatchesIdentity || authorNameMatchesOwner || authorEmailMatchesOwner
+    ? repositoryOwnerAvatarUrl
+    : null;
+};
+
 export const createAuthorInitials = (authorName: string, authorEmail: string): string => {
   const nameParts = authorName
     .trim()

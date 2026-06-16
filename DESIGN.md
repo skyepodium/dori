@@ -98,6 +98,7 @@ Avoid:
 - Motion: minimal and fast; only use motion to clarify transitions.
 - Iconography: use icons when they improve scan speed for Git actions and status. Do not use icons as decoration.
 - Avatars: the current Git identity should use the GitHub remote owner image when the repository owner and author identity match, then Gravatar from Git author email, then local initials for privacy, offline, or missing-image cases.
+- Avatar image providers must be explicitly allowed by the renderer Content Security Policy before relying on them in UI.
 
 ## Layout
 
@@ -154,6 +155,7 @@ Required states:
 - Empty: no repository, no changes, no history, and no extra worktrees need distinct messages.
 - Clean working tree: after commit, the changes view must show a clear clean state with a title and supporting text.
 - Selectors: repository inventory lives in a filtered dropdown with internal scrolling.
+- Repository order: selecting an existing repository must not reorder the recent repository list.
 - Worktrees: active repository worktrees stay visible in a direct source list without a secondary filter field.
 - Errors: Git command failures should show command intent and user-actionable copy, not raw stack traces.
 - Crash safety: renderer exceptions fall back to a localized error boundary instead of an all-white window.

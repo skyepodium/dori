@@ -19,7 +19,7 @@ import {
   type TranslationKey
 } from './i18n';
 import { GitAvatar } from './GitAvatar';
-import { normalizeAvatarEmail } from './avatar';
+import { getRepositoryOwnerAvatarUrlForAuthor } from './avatar';
 import { unwrapIpcResult } from './ipcResult';
 
 type ActiveTab = 'worktrees' | 'changes' | 'history';
@@ -54,6 +54,7 @@ type WindowGitClientShape = Window & {
 
 type RepositoryViewState = {
   repositoryPath: string;
+  repositoryOwnerLogin: string | null;
   repositoryOwnerAvatarUrl: string | null;
   worktrees: Worktree[];
   selectedWorktreePath: string;
@@ -104,6 +105,7 @@ const EMPTY_STATUS: GitStatus = {
 
 const INITIAL_STATE: AppState = {
   repositoryPath: '',
+  repositoryOwnerLogin: null,
   repositoryOwnerAvatarUrl: null,
   worktrees: [],
   selectedWorktreePath: '',
@@ -231,9 +233,13 @@ const addRecentRepositoryPath = (repositoryPaths: string[], repositoryPath: stri
     return repositoryPaths;
   }
 
+  if (repositoryPaths.includes(normalizedPath)) {
+    return repositoryPaths;
+  }
+
   const nextRepositoryPaths = [
     normalizedPath,
-    ...repositoryPaths.filter((existingPath) => existingPath !== normalizedPath)
+    ...repositoryPaths
   ].slice(0, RECENT_REPOSITORIES_LIMIT_COUNT);
 
   writeRecentRepositoryPaths(nextRepositoryPaths);
@@ -343,13 +349,16 @@ const getChangedFileSelectionLabel = (selection: ChangedFileSelection | null, fa
 const getCommitPrimaryAvatarUrl = (
   commit: GitCommit,
   identity: GitIdentity | null,
+  repositoryOwnerLogin: string | null,
   repositoryOwnerAvatarUrl: string | null
 ): string | null => {
-  if (identity === null || repositoryOwnerAvatarUrl === null) {
-    return null;
-  }
-
-  return normalizeAvatarEmail(commit.authorEmail) === normalizeAvatarEmail(identity.email) ? repositoryOwnerAvatarUrl : null;
+  return getRepositoryOwnerAvatarUrlForAuthor({
+    authorEmail: commit.authorEmail,
+    authorName: commit.authorName,
+    identityEmail: identity?.email ?? null,
+    repositoryOwnerAvatarUrl,
+    repositoryOwnerLogin
+  });
 };
 
 const readWorktreeDetails = async (
@@ -501,6 +510,7 @@ const readRepository = async (
 
   return {
     repositoryPath: repository.path,
+    repositoryOwnerLogin: repository.ownerLogin,
     repositoryOwnerAvatarUrl: repository.ownerAvatarUrl,
     worktrees,
     selectedWorktreePath,
@@ -894,7 +904,7 @@ const App = (): ReactElement => {
           recentRepositories: addRecentRepositoryPath(state.recentRepositories, repositoryState.repositoryPath)
         };
       },
-      t('successSwitchRepository')
+      null
     );
   };
 
@@ -1711,6 +1721,7 @@ const App = (): ReactElement => {
                             primaryImageUrl={getCommitPrimaryAvatarUrl(
                               commit,
                               state.identity,
+                              state.repositoryOwnerLogin,
                               state.repositoryOwnerAvatarUrl
                             )}
                             size="compact"
@@ -1736,6 +1747,7 @@ const App = (): ReactElement => {
                         primaryImageUrl={getCommitPrimaryAvatarUrl(
                           selectedCommit,
                           state.identity,
+                          state.repositoryOwnerLogin,
                           state.repositoryOwnerAvatarUrl
                         )}
                         size="regular"

@@ -263,6 +263,7 @@ export class GitService {
       path: rootPath,
       name: basename(rootPath),
       currentBranch: currentBranch.length > 0 ? currentBranch : '(detached)',
+      ownerLogin: githubOwner,
       ownerAvatarUrl: githubOwner === null ? null : createGithubAvatarUrl(githubOwner)
     };
   };

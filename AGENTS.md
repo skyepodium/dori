@@ -93,6 +93,7 @@ When rules conflict, the narrower scoped `AGENTS.md` wins. When changing a rule,
 - All renderer user-facing strings, including JSX text, aria labels, titles, placeholders, errors, and success messages, must use translation keys from `/Users/skyepodium/dev/dori/src/renderer/src/i18n.ts`.
 - When adding or changing copy, keep English and Korean key parity covered by tests.
 - Repository selection uses a dropdown with filtering and internal scrolling for large local inventories.
+- Selecting an existing repository must not reorder the recent repository list.
 - Worktree selection uses an always-visible source list because switching workspaces is a core workflow.
 - Do not add a secondary worktree filter input unless the interaction is redesigned and documented in `/Users/skyepodium/dev/dori/DESIGN.md`.
 - Do not hide worktrees behind a dropdown unless the dropdown is secondary to an always-visible primary worktree navigation.

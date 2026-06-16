@@ -3,6 +3,7 @@ export interface Repository {
   path: string;
   name: string;
   currentBranch: string;
+  ownerLogin: string | null;
   ownerAvatarUrl: string | null;
 }
 

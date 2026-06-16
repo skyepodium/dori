@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createAuthorInitials, createGithubAvatarUrl, createGravatarAvatarUrl, normalizeAvatarEmail } from './avatar';
+import {
+  createAuthorInitials,
+  createGithubAvatarUrl,
+  createGravatarAvatarUrl,
+  getRepositoryOwnerAvatarUrlForAuthor,
+  normalizeAvatarEmail
+} from './avatar';
 
 describe('avatar helpers', () => {
   it('normalizes avatar emails before hashing', () => {
@@ -14,6 +20,38 @@ describe('avatar helpers', () => {
 
   it('creates GitHub avatar URLs from repository owners', () => {
     expect(createGithubAvatarUrl('skyepodium', 64)).toBe('https://github.com/skyepodium.png?size=64');
+  });
+
+  it('uses repository owner avatars for matching commit authors', () => {
+    const repositoryOwnerAvatarUrl = 'https://github.com/skyepodium.png?size=64';
+
+    expect(
+      getRepositoryOwnerAvatarUrlForAuthor({
+        authorEmail: 'skyepodium@gmail.com',
+        authorName: 'Kim Jung yoon',
+        identityEmail: 'skyepodium@gmail.com',
+        repositoryOwnerAvatarUrl,
+        repositoryOwnerLogin: 'skyepodium'
+      })
+    ).toBe(repositoryOwnerAvatarUrl);
+    expect(
+      getRepositoryOwnerAvatarUrlForAuthor({
+        authorEmail: 'noreply@example.com',
+        authorName: 'skyepodium',
+        identityEmail: 'skyepodium@gmail.com',
+        repositoryOwnerAvatarUrl,
+        repositoryOwnerLogin: 'skyepodium'
+      })
+    ).toBe(repositoryOwnerAvatarUrl);
+    expect(
+      getRepositoryOwnerAvatarUrlForAuthor({
+        authorEmail: 'ada@example.com',
+        authorName: 'Ada Lovelace',
+        identityEmail: 'skyepodium@gmail.com',
+        repositoryOwnerAvatarUrl,
+        repositoryOwnerLogin: 'skyepodium'
+      })
+    ).toBeNull();
   });
 
   it('creates stable initials from author names and email fallbacks', () => {

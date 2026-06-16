@@ -28,6 +28,7 @@ describe('GitService', () => {
       path: '/repo',
       name: 'repo',
       currentBranch: 'main',
+      ownerLogin: 'skyepodium',
       ownerAvatarUrl: 'https://github.com/skyepodium.png?size=64'
     });
   });
