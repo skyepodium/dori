@@ -3,6 +3,7 @@ export interface Repository {
   path: string;
   name: string;
   currentBranch: string;
+  ownerAvatarUrl: string | null;
 }
 
 export interface Worktree {

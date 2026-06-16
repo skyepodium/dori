@@ -35,7 +35,8 @@ const createRepository = (path: string): Repository => ({
   id: path,
   path,
   name: 'repo',
-  currentBranch: 'main'
+  currentBranch: 'main',
+  ownerAvatarUrl: 'https://github.com/skyepodium.png?size=64'
 });
 
 const createWorktree = (path: string): Worktree => ({

@@ -5,6 +5,7 @@ type GitAvatarProps = {
   authorEmail: string;
   authorName: string;
   label: string;
+  primaryImageUrl?: string | null;
   size: 'compact' | 'regular';
 };
 
@@ -13,45 +14,72 @@ const AVATAR_IMAGE_SIZE_PX: Record<GitAvatarProps['size'], number> = Object.free
   regular: 64
 });
 
-const GitAvatar = ({ authorEmail, authorName, label, size }: GitAvatarProps): ReactElement => {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+const GitAvatar = ({ authorEmail, authorName, label, primaryImageUrl = null, size }: GitAvatarProps): ReactElement => {
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [imageIndex, setImageIndex] = useState(0);
   const [showFallback, setShowFallback] = useState(normalizeAvatarEmail(authorEmail) === '');
   const initials = createAuthorInitials(authorName, authorEmail);
+  const imageUrl = showFallback ? null : imageUrls[imageIndex] ?? null;
 
   useEffect(() => {
     let isMounted = true;
+    const normalizedPrimaryImageUrl = primaryImageUrl?.trim() ?? '';
+    const normalizedEmail = normalizeAvatarEmail(authorEmail);
 
-    setImageUrl(null);
-    setShowFallback(normalizeAvatarEmail(authorEmail) === '');
+    setImageUrls([]);
+    setImageIndex(0);
+    setShowFallback(normalizedPrimaryImageUrl === '' && normalizedEmail === '');
 
-    if (normalizeAvatarEmail(authorEmail) === '') {
+    if (normalizedPrimaryImageUrl === '' && normalizedEmail === '') {
       return () => {
         isMounted = false;
       };
     }
 
-    void createGravatarAvatarUrl(authorEmail, AVATAR_IMAGE_SIZE_PX[size])
-      .then((url) => {
+    const loadAvatarUrls = async (): Promise<string[]> => {
+      const urls = normalizedPrimaryImageUrl === '' ? [] : [normalizedPrimaryImageUrl];
+
+      if (normalizedEmail !== '') {
+        urls.push(await createGravatarAvatarUrl(authorEmail, AVATAR_IMAGE_SIZE_PX[size]));
+      }
+
+      return urls;
+    };
+
+    void loadAvatarUrls()
+      .then((urls) => {
         if (isMounted) {
-          setImageUrl(url);
-          setShowFallback(false);
+          setImageUrls(urls);
+          setShowFallback(urls.length === 0);
         }
       })
       .catch(() => {
         if (isMounted) {
-          setShowFallback(true);
+          setImageUrls(normalizedPrimaryImageUrl === '' ? [] : [normalizedPrimaryImageUrl]);
+          setShowFallback(normalizedPrimaryImageUrl === '');
         }
       });
 
     return () => {
       isMounted = false;
     };
-  }, [authorEmail, size]);
+  }, [authorEmail, primaryImageUrl, size]);
+
+  const handleImageError = (): void => {
+    setImageIndex((currentIndex) => {
+      if (currentIndex + 1 < imageUrls.length) {
+        return currentIndex + 1;
+      }
+
+      setShowFallback(true);
+      return currentIndex;
+    });
+  };
 
   return (
     <span aria-label={label} className={`git-avatar git-avatar--${size}`} title={label}>
       {imageUrl !== null && !showFallback ? (
-        <img alt="" className="git-avatar__image" onError={() => setShowFallback(true)} src={imageUrl} />
+        <img alt="" className="git-avatar__image" onError={handleImageError} src={imageUrl} />
       ) : (
         <span className="git-avatar__fallback">{initials}</span>
       )}

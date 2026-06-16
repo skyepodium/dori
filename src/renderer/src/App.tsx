@@ -19,6 +19,7 @@ import {
   type TranslationKey
 } from './i18n';
 import { GitAvatar } from './GitAvatar';
+import { normalizeAvatarEmail } from './avatar';
 import { unwrapIpcResult } from './ipcResult';
 
 type ActiveTab = 'worktrees' | 'changes' | 'history';
@@ -53,6 +54,7 @@ type WindowGitClientShape = Window & {
 
 type RepositoryViewState = {
   repositoryPath: string;
+  repositoryOwnerAvatarUrl: string | null;
   worktrees: Worktree[];
   selectedWorktreePath: string;
   identity: GitIdentity | null;
@@ -103,6 +105,7 @@ const EMPTY_STATUS: GitStatus = {
 
 const INITIAL_STATE: AppState = {
   repositoryPath: '',
+  repositoryOwnerAvatarUrl: null,
   worktrees: [],
   selectedWorktreePath: '',
   identity: null,
@@ -328,6 +331,18 @@ const getChangedFileSelectionLabel = (selection: ChangedFileSelection | null, fa
   return `${selection.filePath} · ${selection.diffScope}`;
 };
 
+const getCommitPrimaryAvatarUrl = (
+  commit: GitCommit,
+  identity: GitIdentity | null,
+  repositoryOwnerAvatarUrl: string | null
+): string | null => {
+  if (identity === null || repositoryOwnerAvatarUrl === null) {
+    return null;
+  }
+
+  return normalizeAvatarEmail(commit.authorEmail) === normalizeAvatarEmail(identity.email) ? repositoryOwnerAvatarUrl : null;
+};
+
 const readWorktreeDetails = async (
   gitApi: GitClientApi,
   worktreePath: string,
@@ -477,6 +492,7 @@ const readRepository = async (
 
   return {
     repositoryPath: repository.path,
+    repositoryOwnerAvatarUrl: repository.ownerAvatarUrl,
     worktrees,
     selectedWorktreePath,
     ...details
@@ -1616,6 +1632,7 @@ const App = (): ReactElement => {
                         authorEmail={state.identity?.email ?? ''}
                         authorName={state.identity?.name ?? ''}
                         label={`${t('labelAuthorAvatar')}: ${state.identity?.name ?? t('commonNone')}`}
+                        primaryImageUrl={state.repositoryOwnerAvatarUrl}
                         size="regular"
                       />
                       <div className="commit-author-row__text">
@@ -1705,6 +1722,11 @@ const App = (): ReactElement => {
                             authorEmail={commit.authorEmail}
                             authorName={commit.authorName}
                             label={`${t('labelAuthorAvatar')}: ${commit.authorName}`}
+                            primaryImageUrl={getCommitPrimaryAvatarUrl(
+                              commit,
+                              state.identity,
+                              state.repositoryOwnerAvatarUrl
+                            )}
                             size="compact"
                           />
                           <span className="history-row__sha">{commit.shortSha}</span>
@@ -1725,6 +1747,11 @@ const App = (): ReactElement => {
                         authorEmail={selectedCommit.authorEmail}
                         authorName={selectedCommit.authorName}
                         label={`${t('labelAuthorAvatar')}: ${selectedCommit.authorName}`}
+                        primaryImageUrl={getCommitPrimaryAvatarUrl(
+                          selectedCommit,
+                          state.identity,
+                          state.repositoryOwnerAvatarUrl
+                        )}
                         size="regular"
                       />
                     ) : null}

@@ -116,6 +116,29 @@ const hasDirtyStatus = (status: GitStatus): boolean =>
   status.untracked.length > 0 ||
   status.conflicts.length > 0;
 
+const createGithubAvatarUrl = (owner: string): string => `https://github.com/${encodeURIComponent(owner)}.png?size=64`;
+
+const readGithubOwnerFromRemoteUrl = (remoteUrl: string): string | null => {
+  const trimmedRemoteUrl = remoteUrl.trim();
+  const sshMatch = /^git@github\.com:([^/]+)\/[^/]+(?:\.git)?$/u.exec(trimmedRemoteUrl);
+
+  if (sshMatch?.[1] !== undefined) {
+    return sshMatch[1];
+  }
+
+  try {
+    const url = new URL(trimmedRemoteUrl);
+
+    if (url.hostname !== 'github.com') {
+      return null;
+    }
+
+    return url.pathname.split('/').filter(Boolean)[0] ?? null;
+  } catch (error: unknown) {
+    return null;
+  }
+};
+
 const isNoCommitHistoryError = (error: unknown): boolean => {
   if (!(error instanceof GitServiceError)) {
     return false;
@@ -213,9 +236,19 @@ export class GitService {
     }
   };
 
+  private readonly runOptional = async (args: string[], options?: GitRunnerOptions): Promise<string> => {
+    try {
+      return await this.run(args, options);
+    } catch (error: unknown) {
+      return '';
+    }
+  };
+
   public readonly openRepository = async (repositoryPath: string): Promise<Repository> => {
     const rootPath = (await this.run(['rev-parse', '--show-toplevel'], { cwd: repositoryPath })).trim();
     const currentBranch = (await this.run(['branch', '--show-current'], { cwd: rootPath })).trim();
+    const remoteUrl = await this.runOptional(['config', '--get', 'remote.origin.url'], { cwd: rootPath });
+    const githubOwner = readGithubOwnerFromRemoteUrl(remoteUrl);
 
     if (rootPath.length === 0) {
       throw new GitServiceError({
@@ -229,7 +262,8 @@ export class GitService {
       id: rootPath,
       path: rootPath,
       name: basename(rootPath),
-      currentBranch: currentBranch.length > 0 ? currentBranch : '(detached)'
+      currentBranch: currentBranch.length > 0 ? currentBranch : '(detached)',
+      ownerAvatarUrl: githubOwner === null ? null : createGithubAvatarUrl(githubOwner)
     };
   };
 

@@ -5,6 +5,33 @@ import { describe, expect, it } from 'vitest';
 import { GitService, GitServiceError, type GitRunner } from './service';
 
 describe('GitService', () => {
+  it('opens repositories with a GitHub owner avatar from origin remote', async () => {
+    const runner: GitRunner = async (args) => {
+      if (args.join(' ') === 'rev-parse --show-toplevel') {
+        return '/repo\n';
+      }
+
+      if (args.join(' ') === 'branch --show-current') {
+        return 'main\n';
+      }
+
+      if (args.join(' ') === 'config --get remote.origin.url') {
+        return 'git@github.com:skyepodium/repo.git\n';
+      }
+
+      return '';
+    };
+    const service = new GitService(runner);
+
+    await expect(service.openRepository('/repo')).resolves.toEqual({
+      id: '/repo',
+      path: '/repo',
+      name: 'repo',
+      currentBranch: 'main',
+      ownerAvatarUrl: 'https://github.com/skyepodium.png?size=64'
+    });
+  });
+
   it('creates a new branch worktree from a base ref', async () => {
     const calls: Array<{ args: string[]; cwd?: string }> = [];
     const runner: GitRunner = async (args, options) => {

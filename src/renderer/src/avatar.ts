@@ -1,4 +1,5 @@
 const GRAVATAR_AVATAR_BASE_URL = 'https://www.gravatar.com/avatar';
+const GITHUB_AVATAR_BASE_URL = 'https://github.com';
 const UNKNOWN_AUTHOR_INITIALS = '?';
 
 const createSha256HexDigest = async (value: string): Promise<string> => {
@@ -11,6 +12,10 @@ const createSha256HexDigest = async (value: string): Promise<string> => {
 };
 
 export const normalizeAvatarEmail = (email: string): string => email.trim().toLowerCase();
+
+export const createGithubAvatarUrl = (owner: string, sizePx: number): string => {
+  return `${GITHUB_AVATAR_BASE_URL}/${encodeURIComponent(owner)}.png?size=${sizePx}`;
+};
 
 export const createGravatarAvatarUrl = async (email: string, sizePx: number): Promise<string> => {
   const normalizedEmail = normalizeAvatarEmail(email);
