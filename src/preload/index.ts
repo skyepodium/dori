@@ -1,7 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC_CHANNELS, type DoriGitApi } from '../shared/constants/ipc';
+import { IPC_CHANNELS, type GitClientApi } from '../shared/constants/ipc';
 
-const gitApi: DoriGitApi = {
+const gitApi: GitClientApi = {
+  selectRepositoryDirectory: () => {
+    return ipcRenderer.invoke(IPC_CHANNELS.GIT_SELECT_REPOSITORY_DIRECTORY);
+  },
   openRepository: (repositoryPath) => {
     return ipcRenderer.invoke(IPC_CHANNELS.GIT_OPEN_REPOSITORY, { repositoryPath });
   },
@@ -29,6 +32,32 @@ const gitApi: DoriGitApi = {
   getHistory: (worktreePath, limit) => {
     return ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_HISTORY, { worktreePath, limit });
   },
+  getCommitFiles: (worktreePath, commitSha) => {
+    return ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_COMMIT_FILES, { worktreePath, commitSha });
+  },
+  getCommitFileDiff: (worktreePath, commitSha, filePath) => {
+    return ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_COMMIT_FILE_DIFF, {
+      worktreePath,
+      commitSha,
+      filePath
+    });
+  },
+  getChangedFileDiff: (worktreePath, filePath, diffScope) => {
+    return ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_CHANGED_FILE_DIFF, {
+      worktreePath,
+      filePath,
+      diffScope
+    });
+  },
+  listBranches: (worktreePath) => {
+    return ipcRenderer.invoke(IPC_CHANNELS.GIT_LIST_BRANCHES, { worktreePath });
+  },
+  cherryPick: (worktreePath, commitSha) => {
+    return ipcRenderer.invoke(IPC_CHANNELS.GIT_CHERRY_PICK, { worktreePath, commitSha });
+  },
+  abortCherryPick: (worktreePath) => {
+    return ipcRenderer.invoke(IPC_CHANNELS.GIT_ABORT_CHERRY_PICK, { worktreePath });
+  },
   commit: (worktreePath, message) => {
     return ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT, { worktreePath, message });
   },
@@ -43,6 +72,6 @@ const gitApi: DoriGitApi = {
   }
 };
 
-contextBridge.exposeInMainWorld('dori', {
+contextBridge.exposeInMainWorld('gitClient', {
   git: gitApi
 });

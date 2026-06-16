@@ -21,6 +21,32 @@ export interface GitFileChange {
   status: string;
 }
 
+export interface GitChangedFile {
+  path: string;
+  previousPath?: string;
+  status: string;
+}
+
+export type GitCommitFile = GitChangedFile;
+
+export interface GitFileDiff {
+  commitSha: string;
+  filePath: string;
+  output: string;
+}
+
+export type GitDiffScope = 'staged' | 'unstaged' | 'untracked' | 'conflicts';
+
+export interface GitWorkingTreeDiff {
+  diffScope: GitDiffScope;
+  filePath: string;
+  output: string;
+}
+
+export interface GitBranch {
+  name: string;
+}
+
 export interface GitStatus {
   currentBranch: string;
   ahead: number;

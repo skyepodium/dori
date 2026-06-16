@@ -3,6 +3,11 @@ import { join } from 'node:path';
 import { GitService } from './git/service';
 import { registerGitIpcHandlers } from './ipc';
 
+const DEFAULT_WINDOW_WIDTH_PX = 1700;
+const DEFAULT_WINDOW_HEIGHT_PX = 1000;
+const MIN_WINDOW_WIDTH_PX = 1100;
+const MIN_WINDOW_HEIGHT_PX = 720;
+
 const isLocalDevelopmentRendererUrl = (rendererUrl: string): boolean => {
   if (app.isPackaged) {
     return false;
@@ -19,13 +24,13 @@ const isLocalDevelopmentRendererUrl = (rendererUrl: string): boolean => {
 
 const createWindow = (): BrowserWindow => {
   const mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
+    width: DEFAULT_WINDOW_WIDTH_PX,
+    height: DEFAULT_WINDOW_HEIGHT_PX,
+    minWidth: MIN_WINDOW_WIDTH_PX,
+    minHeight: MIN_WINDOW_HEIGHT_PX,
     show: false,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true

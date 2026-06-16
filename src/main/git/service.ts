@@ -1,7 +1,18 @@
 import { execFile } from 'node:child_process';
-import { basename } from 'node:path';
-import { parseHistory, parseStatus, parseWorktreeList } from './parser';
-import type { GitCommit, GitStatus, Repository, Worktree } from '../../shared/types';
+import { readFile } from 'node:fs/promises';
+import { basename, isAbsolute, relative, resolve } from 'node:path';
+import { parseBranches, parseCommitFiles, parseHistory, parseStatus, parseWorktreeList } from './parser';
+import type {
+  GitBranch,
+  GitCommit,
+  GitCommitFile,
+  GitDiffScope,
+  GitFileDiff,
+  GitStatus,
+  GitWorkingTreeDiff,
+  Repository,
+  Worktree
+} from '../../shared/types';
 
 export interface GitRunnerOptions {
   cwd?: string;
@@ -12,6 +23,7 @@ export type GitRunner = (args: string[], options?: GitRunnerOptions) => Promise<
 export type GitServiceErrorCode =
   | 'GIT_COMMAND_FAILED'
   | 'GIT_NOT_REPOSITORY'
+  | 'INVALID_FILE_PATH'
   | 'WORKTREE_DIRTY';
 
 interface GitServiceErrorOptions {
@@ -110,6 +122,79 @@ const isNoCommitHistoryError = (error: unknown): boolean => {
 
   const message = `${error.message} ${error.stderr ?? ''}`.toLowerCase();
   return message.includes('does not have any commits yet') || message.includes('your current branch') && message.includes('no commits');
+};
+
+const resolveWorktreeFilePath = (worktreePath: string, filePath: string): string => {
+  if (isAbsolute(filePath)) {
+    throw new GitServiceError({
+      code: 'INVALID_FILE_PATH',
+      message: 'File path must be relative to the worktree.',
+      cwd: worktreePath
+    });
+  }
+
+  const rootPath = resolve(worktreePath);
+  const absoluteFilePath = resolve(rootPath, filePath);
+  const relativeFilePath = relative(rootPath, absoluteFilePath);
+
+  if (relativeFilePath.startsWith('..') || isAbsolute(relativeFilePath)) {
+    throw new GitServiceError({
+      code: 'INVALID_FILE_PATH',
+      message: 'File path must stay inside the worktree.',
+      cwd: worktreePath
+    });
+  }
+
+  return absoluteFilePath;
+};
+
+const splitPatchLines = (content: string): { hasTrailingNewline: boolean; lines: string[] } => {
+  if (content.length === 0) {
+    return {
+      hasTrailingNewline: true,
+      lines: []
+    };
+  }
+
+  const normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const hasTrailingNewline = normalizedContent.endsWith('\n');
+  const patchContent = hasTrailingNewline ? normalizedContent.slice(0, -1) : normalizedContent;
+
+  return {
+    hasTrailingNewline,
+    lines: patchContent.split('\n')
+  };
+};
+
+const createUntrackedFileDiff = async (worktreePath: string, filePath: string): Promise<string> => {
+  const absoluteFilePath = resolveWorktreeFilePath(worktreePath, filePath);
+  const buffer = await readFile(absoluteFilePath);
+
+  if (buffer.includes(0)) {
+    return [
+      `diff --git a/${filePath} b/${filePath}`,
+      'new file mode 100644',
+      `Binary files /dev/null and b/${filePath} differ`,
+      ''
+    ].join('\n');
+  }
+
+  const { hasTrailingNewline, lines } = splitPatchLines(buffer.toString('utf8'));
+  const patchLines = [
+    `diff --git a/${filePath} b/${filePath}`,
+    'new file mode 100644',
+    '--- /dev/null',
+    `+++ b/${filePath}`,
+    `@@ -0,0 +1,${lines.length} @@`,
+    ...lines.map((line) => `+${line}`)
+  ];
+
+  if (!hasTrailingNewline) {
+    patchLines.push('\\ No newline at end of file');
+  }
+
+  patchLines.push('');
+  return patchLines.join('\n');
 };
 
 export class GitService {
@@ -223,8 +308,69 @@ export class GitService {
     return parseHistory(output);
   };
 
+  public readonly getCommitFiles = async (worktreePath: string, commitSha: string): Promise<GitCommitFile[]> => {
+    const output = await this.run(
+      ['diff-tree', '--no-commit-id', '--name-status', '-r', '--root', '--find-renames', commitSha],
+      { cwd: worktreePath }
+    );
+    return parseCommitFiles(output);
+  };
+
+  public readonly getCommitFileDiff = async (
+    worktreePath: string,
+    commitSha: string,
+    filePath: string
+  ): Promise<GitFileDiff> => {
+    const diff = await this.run(['show', '--format=', '--find-renames', commitSha, '--', filePath], {
+      cwd: worktreePath
+    });
+
+    return {
+      commitSha,
+      filePath,
+      output: diff
+    };
+  };
+
+  public readonly getChangedFileDiff = async (
+    worktreePath: string,
+    filePath: string,
+    diffScope: GitDiffScope
+  ): Promise<GitWorkingTreeDiff> => {
+    if (diffScope === 'untracked') {
+      return {
+        diffScope,
+        filePath,
+        output: await createUntrackedFileDiff(worktreePath, filePath)
+      };
+    }
+
+    const args = diffScope === 'staged' ? ['diff', '--cached', '--', filePath] : ['diff', '--', filePath];
+    const diff = await this.run(args, { cwd: worktreePath });
+
+    return {
+      diffScope,
+      filePath,
+      output: diff
+    };
+  };
+
+  public readonly listBranches = async (worktreePath: string): Promise<GitBranch[]> => {
+    const output = await this.run(['branch', '--format=%(refname:short)'], { cwd: worktreePath });
+    return parseBranches(output);
+  };
+
   public readonly commit = async (worktreePath: string, message: string): Promise<void> => {
+    await this.run(['add', '--all'], { cwd: worktreePath });
     await this.run(['commit', '-m', message], { cwd: worktreePath });
+  };
+
+  public readonly cherryPick = async (worktreePath: string, commitSha: string): Promise<void> => {
+    await this.run(['cherry-pick', commitSha], { cwd: worktreePath });
+  };
+
+  public readonly abortCherryPick = async (worktreePath: string): Promise<void> => {
+    await this.run(['cherry-pick', '--abort'], { cwd: worktreePath });
   };
 
   public readonly fetch = async (repositoryPath: string): Promise<void> => {

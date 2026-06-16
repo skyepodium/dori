@@ -1,10 +1,21 @@
 import type { IpcMain } from 'electron';
+import { dialog } from 'electron';
 import {
   IPC_CHANNELS,
-  type DoriIpcResult,
+  type DirectorySelectionResult,
+  type AppIpcResult,
   type GitCommandResult,
 } from '../shared/constants/ipc';
-import type { GitCommit, GitStatus, Repository, Worktree } from '../shared/types';
+import type {
+  GitBranch,
+  GitChangedFile,
+  GitCommit,
+  GitDiffScope,
+  GitStatus,
+  GitWorkingTreeDiff,
+  Repository,
+  Worktree
+} from '../shared/types';
 
 type GitServiceApi = {
   openRepository: (repositoryPath: string) => Promise<Repository>;
@@ -22,6 +33,16 @@ type GitServiceApi = {
   ) => Promise<GitCommandResult | void>;
   getStatus: (worktreePath: string) => Promise<GitStatus>;
   getHistory: (worktreePath: string, limit?: number) => Promise<GitCommit[]>;
+  getCommitFiles: (worktreePath: string, commitSha: string) => Promise<GitChangedFile[]>;
+  getCommitFileDiff: (worktreePath: string, commitSha: string, filePath: string) => Promise<GitCommandResult>;
+  getChangedFileDiff: (
+    worktreePath: string,
+    filePath: string,
+    diffScope: GitDiffScope
+  ) => Promise<GitWorkingTreeDiff>;
+  listBranches: (worktreePath: string) => Promise<GitBranch[]>;
+  cherryPick: (worktreePath: string, commitSha: string) => Promise<GitCommandResult | void>;
+  abortCherryPick: (worktreePath: string) => Promise<GitCommandResult | void>;
   commit: (worktreePath: string, message: string) => Promise<GitCommandResult | void>;
   fetch: (repositoryPath: string) => Promise<GitCommandResult | void>;
   pull: (worktreePath: string) => Promise<GitCommandResult | void>;
@@ -90,6 +111,21 @@ const readOptionalPositiveInteger = (payload: unknown, key: string): number | un
   return value;
 };
 
+const readGitDiffScope = (payload: unknown): GitDiffScope => {
+  const diffScope = readRequiredString(payload, 'diffScope');
+
+  if (
+    diffScope !== 'staged' &&
+    diffScope !== 'unstaged' &&
+    diffScope !== 'untracked' &&
+    diffScope !== 'conflicts'
+  ) {
+    throw new IpcValidationError('diffScope must be one of: staged, unstaged, untracked, conflicts.');
+  }
+
+  return diffScope;
+};
+
 const normalizeCommandResult = (value: GitCommandResult | void): GitCommandResult => {
   return value ?? EMPTY_COMMAND_RESULT;
 };
@@ -118,7 +154,7 @@ const readErrorMessage = (error: unknown): string => {
   return 'Git operation failed.';
 };
 
-const toIpcResult = async <T>(handler: IpcHandler<T>, payload: unknown): Promise<DoriIpcResult<T>> => {
+const toIpcResult = async <T>(handler: IpcHandler<T>, payload: unknown): Promise<AppIpcResult<T>> => {
   try {
     return {
       ok: true,
@@ -142,6 +178,17 @@ const registerHandler = <T>(ipcMain: IpcMainHandleRegistry, channel: string, han
 };
 
 export const registerGitIpcHandlers = (ipcMain: IpcMainHandleRegistry, gitService: GitServiceApi): void => {
+  registerHandler<DirectorySelectionResult>(ipcMain, IPC_CHANNELS.GIT_SELECT_REPOSITORY_DIRECTORY, async () => {
+    const selection = await dialog.showOpenDialog({
+      title: '저장소 폴더 선택',
+      properties: ['openDirectory']
+    });
+
+    return {
+      path: selection.canceled ? null : selection.filePaths[0] ?? null
+    };
+  });
+
   registerHandler(ipcMain, IPC_CHANNELS.GIT_OPEN_REPOSITORY, async (payload) => {
     const repositoryPath = readRequiredString(payload, 'repositoryPath');
     return gitService.openRepository(repositoryPath);
@@ -179,6 +226,44 @@ export const registerGitIpcHandlers = (ipcMain: IpcMainHandleRegistry, gitServic
     const limit = readOptionalPositiveInteger(payload, 'limit');
 
     return gitService.getHistory(worktreePath, limit);
+  });
+
+  registerHandler(ipcMain, IPC_CHANNELS.GIT_GET_COMMIT_FILES, async (payload) => {
+    const worktreePath = readRequiredString(payload, 'worktreePath');
+    const commitSha = readRequiredString(payload, 'commitSha');
+
+    return gitService.getCommitFiles(worktreePath, commitSha);
+  });
+
+  registerHandler(ipcMain, IPC_CHANNELS.GIT_GET_COMMIT_FILE_DIFF, async (payload) => {
+    const worktreePath = readRequiredString(payload, 'worktreePath');
+    const commitSha = readRequiredString(payload, 'commitSha');
+    const filePath = readRequiredString(payload, 'filePath');
+
+    return gitService.getCommitFileDiff(worktreePath, commitSha, filePath);
+  });
+
+  registerHandler(ipcMain, IPC_CHANNELS.GIT_GET_CHANGED_FILE_DIFF, async (payload) => {
+    const worktreePath = readRequiredString(payload, 'worktreePath');
+    const filePath = readRequiredString(payload, 'filePath');
+    const diffScope = readGitDiffScope(payload);
+
+    return gitService.getChangedFileDiff(worktreePath, filePath, diffScope);
+  });
+
+  registerHandler(ipcMain, IPC_CHANNELS.GIT_LIST_BRANCHES, async (payload) => {
+    return gitService.listBranches(readRequiredString(payload, 'worktreePath'));
+  });
+
+  registerHandler(ipcMain, IPC_CHANNELS.GIT_CHERRY_PICK, async (payload) => {
+    const worktreePath = readRequiredString(payload, 'worktreePath');
+    const commitSha = readRequiredString(payload, 'commitSha');
+
+    return normalizeCommandResult(await gitService.cherryPick(worktreePath, commitSha));
+  });
+
+  registerHandler(ipcMain, IPC_CHANNELS.GIT_ABORT_CHERRY_PICK, async (payload) => {
+    return normalizeCommandResult(await gitService.abortCherryPick(readRequiredString(payload, 'worktreePath')));
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.GIT_COMMIT, async (payload) => {

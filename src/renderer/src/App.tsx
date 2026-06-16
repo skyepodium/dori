@@ -1,26 +1,78 @@
 import { useCallback, useMemo, useState, type ReactElement } from 'react';
-import type { DoriGitApi, DoriIpcResult } from '../../shared/constants/ipc';
-import type { GitCommit, GitFileChange, GitStatus, Worktree } from '../../shared/types';
+import type { AppIpcResult, GitClientApi } from '../../shared/constants/ipc';
+import type { GitChangedFile, GitCommit, GitDiffScope, GitFileChange, GitStatus, Worktree } from '../../shared/types';
+import {
+  DEFAULT_LANGUAGE,
+  LANGUAGE_STORAGE_KEY,
+  isLanguage,
+  translate,
+  type Language,
+  type TranslationKey
+} from './i18n';
 
-type ActiveTab = 'changes' | 'history';
+type ActiveTab = 'worktrees' | 'changes' | 'history';
 type DialogMode = 'create' | 'remove' | null;
-type OperationName = 'open' | 'refresh' | 'fetch' | 'pull' | 'push' | 'createWorktree' | 'removeWorktree';
+type OperationName =
+  | 'open'
+  | 'refresh'
+  | 'fetch'
+  | 'pull'
+  | 'push'
+  | 'commit'
+  | 'createWorktree'
+  | 'removeWorktree'
+  | 'cherryPick'
+  | 'abortCherryPick';
+
+type CommitChangedFile = GitChangedFile & {
+  additions?: number;
+  deletions?: number;
+};
+
+type ChangedFileSelection = {
+  filePath: string;
+  diffScope: GitDiffScope;
+};
+
+type WindowGitClientShape = Window & {
+  gitClient?: {
+    git?: GitClientApi;
+  };
+};
 
 type RepositoryViewState = {
   repositoryPath: string;
   worktrees: Worktree[];
   selectedWorktreePath: string;
   status: GitStatus | null;
+  selectedChangedFilePath: string;
+  selectedChangedFileScope: GitDiffScope | '';
+  changedFileDiff: string;
+  changesDetailsMessage: string | null;
   history: GitCommit[];
+  selectedCommitSha: string;
+  commitFiles: CommitChangedFile[];
+  selectedCommitFilePath: string;
+  commitDiff: string;
+  historyDetailsMessage: string | null;
 };
 
 type AppState = RepositoryViewState & {
+  recentRepositories: string[];
+  language: Language;
   activeTab: ActiveTab;
   dialogMode: DialogMode;
+  repositoryMenuOpen: boolean;
+  repositoryFilter: string;
+  worktreeFilter: string;
   isLoading: boolean;
+  isChangedFileDiffLoading: boolean;
+  isHistoryDetailsLoading: boolean;
   operation: OperationName | null;
   errorMessage: string | null;
   successMessage: string | null;
+  commitSummary: string;
+  commitDescription: string;
   createBranchName: string;
   createWorktreePath: string;
   createBaseRef: string;
@@ -42,13 +94,31 @@ const INITIAL_STATE: AppState = {
   worktrees: [],
   selectedWorktreePath: '',
   status: null,
+  selectedChangedFilePath: '',
+  selectedChangedFileScope: '',
+  changedFileDiff: '',
+  changesDetailsMessage: null,
   history: [],
-  activeTab: 'changes',
+  selectedCommitSha: '',
+  commitFiles: [],
+  selectedCommitFilePath: '',
+  commitDiff: '',
+  historyDetailsMessage: null,
+  recentRepositories: [],
+  language: DEFAULT_LANGUAGE,
+  activeTab: 'worktrees',
   dialogMode: null,
+  repositoryMenuOpen: false,
+  repositoryFilter: '',
+  worktreeFilter: '',
   isLoading: false,
+  isChangedFileDiffLoading: false,
+  isHistoryDetailsLoading: false,
   operation: null,
   errorMessage: null,
   successMessage: null,
+  commitSummary: '',
+  commitDescription: '',
   createBranchName: '',
   createWorktreePath: '',
   createBaseRef: 'main',
@@ -56,22 +126,29 @@ const INITIAL_STATE: AppState = {
 };
 
 const HISTORY_LIMIT_COUNT = 50;
+const RECENT_REPOSITORIES_LIMIT_COUNT = 12;
+const RECENT_REPOSITORIES_STORAGE_KEY = 'recentRepositoryPaths';
 const SHORT_PATH_SEGMENT_COUNT = 2;
-const OPERATION_LABELS: Record<OperationName, string> = {
-  open: '저장소 열기',
-  refresh: '상태 새로고침',
-  fetch: 'Fetch',
-  pull: 'Pull',
-  push: 'Push',
-  createWorktree: 'Worktree 생성',
-  removeWorktree: 'Worktree 삭제'
+const OPERATION_LABEL_KEYS: Record<OperationName, TranslationKey> = {
+  open: 'operationOpen',
+  refresh: 'operationRefresh',
+  fetch: 'operationFetch',
+  pull: 'operationPull',
+  push: 'operationPush',
+  commit: 'operationCommit',
+  createWorktree: 'operationCreateWorktree',
+  removeWorktree: 'operationRemoveWorktree',
+  cherryPick: 'operationCherryPick',
+  abortCherryPick: 'operationAbortCherryPick'
 };
 
-const getGitApi = (): DoriGitApi | null => {
-  return window.dori?.git ?? null;
+const getGitApi = (): GitClientApi | null => {
+  const gitWindow = window as WindowGitClientShape;
+
+  return gitWindow.gitClient?.git ?? null;
 };
 
-const unwrapIpcResult = async <T,>(resultPromise: Promise<DoriIpcResult<T>>): Promise<T> => {
+const unwrapIpcResult = async <T,>(resultPromise: Promise<AppIpcResult<T>>): Promise<T> => {
   const result = await resultPromise;
 
   if (result.ok) {
@@ -81,7 +158,75 @@ const unwrapIpcResult = async <T,>(resultPromise: Promise<DoriIpcResult<T>>): Pr
   throw new Error(result.error.message);
 };
 
-const getErrorMessage = (error: unknown): string => {
+const getRepositoryName = (repositoryPath: string): string => {
+  const segments = repositoryPath.split('/').filter(Boolean);
+
+  return segments.at(-1) ?? repositoryPath;
+};
+
+const readRecentRepositoryPaths = (): string[] => {
+  try {
+    const storedValue = window.localStorage.getItem(RECENT_REPOSITORIES_STORAGE_KEY);
+
+    if (storedValue === null) {
+      return [];
+    }
+
+    const parsedValue: unknown = JSON.parse(storedValue);
+
+    if (!Array.isArray(parsedValue)) {
+      return [];
+    }
+
+    return parsedValue.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  } catch (error: unknown) {
+    return [];
+  }
+};
+
+const writeRecentRepositoryPaths = (repositoryPaths: string[]): void => {
+  try {
+    window.localStorage.setItem(RECENT_REPOSITORIES_STORAGE_KEY, JSON.stringify(repositoryPaths));
+  } catch (error: unknown) {
+    return;
+  }
+};
+
+const readLanguage = (): Language => {
+  try {
+    const storedValue = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    return isLanguage(storedValue) ? storedValue : DEFAULT_LANGUAGE;
+  } catch (error: unknown) {
+    return DEFAULT_LANGUAGE;
+  }
+};
+
+const writeLanguage = (language: Language): void => {
+  try {
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  } catch (error: unknown) {
+    return;
+  }
+};
+
+const addRecentRepositoryPath = (repositoryPaths: string[], repositoryPath: string): string[] => {
+  const normalizedPath = repositoryPath.trim();
+
+  if (normalizedPath === '') {
+    return repositoryPaths;
+  }
+
+  const nextRepositoryPaths = [
+    normalizedPath,
+    ...repositoryPaths.filter((existingPath) => existingPath !== normalizedPath)
+  ].slice(0, RECENT_REPOSITORIES_LIMIT_COUNT);
+
+  writeRecentRepositoryPaths(nextRepositoryPaths);
+
+  return nextRepositoryPaths;
+};
+
+const getErrorMessage = (error: unknown, fallbackMessage: string): string => {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
@@ -90,7 +235,7 @@ const getErrorMessage = (error: unknown): string => {
     return error;
   }
 
-  return 'Git 명령에 실패했습니다. 저장소 경로를 확인한 뒤 다시 시도하세요.';
+  return fallbackMessage;
 };
 
 const getStatusFileCount = (status: GitStatus | null): number => {
@@ -115,14 +260,89 @@ const getSelectedWorktree = (worktrees: Worktree[], selectedWorktreePath: string
   return worktrees.find((worktree) => worktree.path === selectedWorktreePath) ?? null;
 };
 
+const getSelectedCommit = (history: GitCommit[], selectedCommitSha: string): GitCommit | null => {
+  return history.find((commit) => commit.sha === selectedCommitSha) ?? null;
+};
+
+const getShortSha = (sha: string): string => {
+  return sha.length <= 7 ? sha : sha.slice(0, 7);
+};
+
+const getFileDisplayStatus = (file: CommitChangedFile): string => {
+  if (file.previousPath !== undefined && file.previousPath !== file.path) {
+    return 'R';
+  }
+
+  return file.status;
+};
+
+const getFileStatsLabel = (file: CommitChangedFile): string => {
+  const additions = file.additions ?? 0;
+  const deletions = file.deletions ?? 0;
+
+  if (additions === 0 && deletions === 0) {
+    return '';
+  }
+
+  return `+${additions} -${deletions}`;
+};
+
+const getDiffLineTone = (line: string): string => {
+  if (
+    line.startsWith('diff --git') ||
+    line.startsWith('index ') ||
+    line.startsWith('new file mode') ||
+    line.startsWith('deleted file mode') ||
+    line.startsWith('similarity index') ||
+    line.startsWith('rename from') ||
+    line.startsWith('rename to') ||
+    line.startsWith('--- ') ||
+    line.startsWith('+++ ')
+  ) {
+    return 'file';
+  }
+
+  if (line.startsWith('@@')) {
+    return 'hunk';
+  }
+
+  if (line.startsWith('+')) {
+    return 'added';
+  }
+
+  if (line.startsWith('-')) {
+    return 'removed';
+  }
+
+  return 'context';
+};
+
+const getChangedFileSelectionLabel = (selection: ChangedFileSelection | null, fallbackLabel: string): string => {
+  if (selection === null) {
+    return fallbackLabel;
+  }
+
+  return `${selection.filePath} · ${selection.diffScope}`;
+};
+
 const readWorktreeDetails = async (
-  gitApi: DoriGitApi,
-  worktreePath: string
-): Promise<Pick<RepositoryViewState, 'status' | 'history'>> => {
+  gitApi: GitClientApi,
+  worktreePath: string,
+  t: (key: TranslationKey) => string
+): Promise<Pick<RepositoryViewState, 'status' | 'selectedChangedFilePath' | 'selectedChangedFileScope' | 'changedFileDiff' | 'changesDetailsMessage' | 'history' | 'selectedCommitSha' | 'commitFiles' | 'selectedCommitFilePath' | 'commitDiff' | 'historyDetailsMessage'>> => {
   if (worktreePath.trim().length === 0) {
     return {
       status: null,
-      history: []
+      selectedChangedFilePath: '',
+      selectedChangedFileScope: '',
+      changedFileDiff: '',
+      changesDetailsMessage: null,
+      history: [],
+      selectedCommitSha: '',
+      commitFiles: [],
+      selectedCommitFilePath: '',
+      commitDiff: '',
+      historyDetailsMessage: null
     };
   }
 
@@ -131,17 +351,112 @@ const readWorktreeDetails = async (
     unwrapIpcResult(gitApi.getHistory(worktreePath, HISTORY_LIMIT_COUNT))
   ]);
 
-  return { status, history };
+  const selectedCommitSha = history[0]?.sha ?? '';
+  const historyDetails =
+    selectedCommitSha === ''
+      ? {
+          commitFiles: [],
+          selectedCommitFilePath: '',
+          commitDiff: '',
+          historyDetailsMessage: null
+        }
+      : await readCommitDetails(gitApi, worktreePath, selectedCommitSha, '', t);
+
+  return {
+    status,
+    selectedChangedFilePath: '',
+    selectedChangedFileScope: '',
+    changedFileDiff: '',
+    changesDetailsMessage: null,
+    history,
+    selectedCommitSha,
+    ...historyDetails
+  };
+};
+
+const readChangedFileDiff = async (
+  gitApi: GitClientApi,
+  worktreePath: string,
+  selection: ChangedFileSelection
+): Promise<Pick<RepositoryViewState, 'changedFileDiff' | 'changesDetailsMessage'>> => {
+  if (worktreePath.trim() === '' || selection.filePath.trim() === '') {
+    return {
+      changedFileDiff: '',
+      changesDetailsMessage: null
+    };
+  }
+
+  const diffResult = await unwrapIpcResult(
+    gitApi.getChangedFileDiff(worktreePath, selection.filePath, selection.diffScope)
+  );
+
+  return {
+    changedFileDiff: diffResult.output,
+    changesDetailsMessage: null
+  };
+};
+
+const readCommitDetails = async (
+  gitApi: GitClientApi,
+  worktreePath: string,
+  commitSha: string,
+  preferredFilePath: string,
+  t: (key: TranslationKey) => string
+): Promise<Pick<RepositoryViewState, 'commitFiles' | 'selectedCommitFilePath' | 'commitDiff' | 'historyDetailsMessage'>> => {
+  if (worktreePath.trim() === '' || commitSha.trim() === '') {
+    return {
+      commitFiles: [],
+      selectedCommitFilePath: '',
+      commitDiff: '',
+      historyDetailsMessage: null
+    };
+  }
+
+  if (typeof gitApi.getCommitFiles !== 'function' || typeof gitApi.getCommitFileDiff !== 'function') {
+    return {
+      commitFiles: [],
+      selectedCommitFilePath: '',
+      commitDiff: '',
+      historyDetailsMessage: t('commitFileInfoUnavailable')
+    };
+  }
+
+  const commitFiles = await unwrapIpcResult(
+    gitApi.getCommitFiles(worktreePath, commitSha) as Promise<AppIpcResult<CommitChangedFile[]>>
+  );
+  const selectedCommitFilePath =
+    commitFiles.find((file) => file.path === preferredFilePath)?.path ?? commitFiles[0]?.path ?? '';
+
+  if (selectedCommitFilePath === '') {
+    return {
+      commitFiles,
+      selectedCommitFilePath,
+      commitDiff: '',
+      historyDetailsMessage: t('commitNoFilesInCommit')
+    };
+  }
+
+  const diffResult = await unwrapIpcResult(
+    gitApi.getCommitFileDiff(worktreePath, commitSha, selectedCommitFilePath)
+  );
+
+  return {
+    commitFiles,
+    selectedCommitFilePath,
+    commitDiff: diffResult.output,
+    historyDetailsMessage: null
+  };
 };
 
 const readRepository = async (
   repositoryPath: string,
-  fallbackSelectedPath: string
+  fallbackSelectedPath: string,
+  t: (key: TranslationKey) => string
 ): Promise<RepositoryViewState> => {
   const gitApi = getGitApi();
 
   if (gitApi === null) {
-    throw new Error('Preload Git API가 아직 준비되지 않았습니다.');
+    throw new Error(t('errorGitApiUnavailable'));
   }
 
   const repository = await unwrapIpcResult(gitApi.openRepository(repositoryPath));
@@ -152,7 +467,7 @@ const readRepository = async (
     worktrees.find((worktree) => worktree.isMainWorktree)?.path ||
     worktrees[0]?.path ||
     '';
-  const details = await readWorktreeDetails(gitApi, selectedWorktreePath);
+  const details = await readWorktreeDetails(gitApi, selectedWorktreePath, t);
 
   return {
     repositoryPath: repository.path,
@@ -199,13 +514,21 @@ const ToolbarButton = ({
 };
 
 const FileGroup = ({
+  emptyLabel,
   files,
+  selectedFilePath,
+  selectedScope,
+  onSelect,
   title,
   tone
 }: {
+  emptyLabel: string;
   files: GitFileChange[];
+  selectedFilePath: string;
+  selectedScope: GitDiffScope | '';
+  onSelect: (selection: ChangedFileSelection) => void;
   title: string;
-  tone: 'staged' | 'unstaged' | 'untracked' | 'conflicts';
+  tone: GitDiffScope;
 }): ReactElement => {
   if (files.length === 0) {
     return (
@@ -214,7 +537,7 @@ const FileGroup = ({
           <span>{title}</span>
           <span className="file-group__count">0</span>
         </header>
-        <div className="empty-inline">파일 없음</div>
+        <div className="empty-inline">{emptyLabel}</div>
       </section>
     );
   }
@@ -226,33 +549,180 @@ const FileGroup = ({
         <span className="file-group__count">{files.length}</span>
       </header>
       <ul className="file-list">
-        {files.map((file) => (
-          <li className="file-row" key={`${tone}-${file.status}-${file.path}`}>
-            <span className={`file-row__status file-row__status--${tone}`}>{file.status}</span>
-            <span className="file-row__path">{file.path}</span>
-          </li>
-        ))}
+        {files.map((file) => {
+          const isSelected = selectedFilePath === file.path && selectedScope === tone;
+
+          return (
+            <li className="file-row" key={`${tone}-${file.status}-${file.path}`}>
+              <button
+                aria-selected={isSelected}
+                className={`file-row__button${isSelected ? ' file-row__button--selected' : ''}`}
+                onClick={() => onSelect({ filePath: file.path, diffScope: tone })}
+                type="button"
+              >
+                <span className={`file-row__status file-row__status--${tone}`}>{file.status}</span>
+                <span className="file-row__path">{file.path}</span>
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
 };
 
-const App = (): ReactElement => {
-  const [state, setState] = useState<AppState>(INITIAL_STATE);
+const DiffText = ({ diffText, label }: { diffText: string; label: string }): ReactElement => {
+  const lines = diffText.split('\n');
 
+  return (
+    <div aria-label={label} className="diff-text" role="document">
+      {lines.map((line, index) => (
+        <div className={`diff-line diff-line--${getDiffLineTone(line)}`} key={`${index}-${line}`}>
+          <span className="diff-line__content">{line === '' ? ' ' : line}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const CommitFileRow = ({
+  file,
+  isSelected,
+  onSelect
+}: {
+  file: CommitChangedFile;
+  isSelected: boolean;
+  onSelect: () => void;
+}): ReactElement => {
+  const statsLabel = getFileStatsLabel(file);
+
+  return (
+    <button
+      aria-selected={isSelected}
+      className={`commit-file-row${isSelected ? ' commit-file-row--selected' : ''}`}
+      onClick={onSelect}
+      role="option"
+      type="button"
+    >
+      <span className="commit-file-row__status">{getFileDisplayStatus(file)}</span>
+      <span className="commit-file-row__main">
+        <span className="commit-file-row__path">{file.path}</span>
+        {file.previousPath !== undefined && file.previousPath !== file.path ? (
+          <span className="commit-file-row__old-path">{file.previousPath}</span>
+        ) : null}
+      </span>
+      {statsLabel !== '' ? <span className="commit-file-row__stats">{statsLabel}</span> : null}
+    </button>
+  );
+};
+
+const WorktreeOverviewRow = ({
+  isRemoveDisabled,
+  isSelected,
+  labels,
+  onRemove,
+  onSelect,
+  worktree
+}: {
+  isRemoveDisabled: boolean;
+  isSelected: boolean;
+  labels: {
+    deleteTitle: string;
+    hasChanges: string;
+    locked: string;
+    main: string;
+    selected: string;
+  };
+  onRemove: () => void;
+  onSelect: () => void;
+  worktree: Worktree;
+}): ReactElement => {
+  return (
+    <article className={`worktree-overview-row${isSelected ? ' worktree-overview-row--selected' : ''}`}>
+      <button
+        aria-label={`${worktree.branch} ${labels.selected}`}
+        className="worktree-overview-row__main"
+        onClick={onSelect}
+        type="button"
+      >
+        <span className="worktree-overview-row__branch">{worktree.branch}</span>
+        <span className="worktree-overview-row__path">{worktree.path}</span>
+      </button>
+      <span className="worktree-overview-row__sha">{getShortSha(worktree.headSha)}</span>
+      <span className="worktree-overview-row__meta">
+        {worktree.isMainWorktree ? <StatusPill label={labels.main} tone="neutral" /> : null}
+        {worktree.hasChanges ? <StatusPill label={labels.hasChanges} tone="warning" /> : null}
+        {worktree.isLocked ? <StatusPill label={labels.locked} tone="locked" /> : null}
+        {isSelected ? <StatusPill label={labels.selected} tone="success" /> : null}
+      </span>
+      <button
+        className="compact-button"
+        disabled={isRemoveDisabled}
+        onClick={onRemove}
+        title={labels.deleteTitle}
+        type="button"
+      >
+        {labels.deleteTitle}
+      </button>
+    </article>
+  );
+};
+
+const App = (): ReactElement => {
+  const [state, setState] = useState<AppState>(() => ({
+    ...INITIAL_STATE,
+    recentRepositories: readRecentRepositoryPaths(),
+    language: readLanguage()
+  }));
+
+  const t = useCallback((key: TranslationKey): string => translate(state.language, key), [state.language]);
   const gitApi = getGitApi();
   const selectedWorktree = useMemo(
     () => getSelectedWorktree(state.worktrees, state.selectedWorktreePath),
     [state.selectedWorktreePath, state.worktrees]
   );
+  const selectedCommit = useMemo(
+    () => getSelectedCommit(state.history, state.selectedCommitSha),
+    [state.history, state.selectedCommitSha]
+  );
+  const filteredRecentRepositories = useMemo(() => {
+    const query = state.repositoryFilter.trim().toLowerCase();
+
+    if (query === '') {
+      return state.recentRepositories;
+    }
+
+    return state.recentRepositories.filter((repositoryPath) => repositoryPath.toLowerCase().includes(query));
+  }, [state.recentRepositories, state.repositoryFilter]);
+  const filteredWorktrees = useMemo(() => {
+    const query = state.worktreeFilter.trim().toLowerCase();
+
+    if (query === '') {
+      return state.worktrees;
+    }
+
+    return state.worktrees.filter(
+      (worktree) => worktree.branch.toLowerCase().includes(query) || worktree.path.toLowerCase().includes(query)
+    );
+  }, [state.worktreeFilter, state.worktrees]);
   const status = state.status ?? EMPTY_STATUS;
   const hasRepository = state.repositoryPath.trim() !== '';
   const hasGitApi = gitApi !== null;
   const hasSelectedWorktree = selectedWorktree !== null;
+  const shouldShowSelectedWorktreePath =
+    selectedWorktree !== null && selectedWorktree.path !== state.repositoryPath;
   const dirtyFileCount = getStatusFileCount(state.status);
   const isDirty = dirtyFileCount > 0 || selectedWorktree?.hasChanges === true;
   const canRunRepositoryAction = hasGitApi && hasRepository && !state.isLoading;
   const canRunWorktreeAction = canRunRepositoryAction && hasSelectedWorktree;
+  const commitMessage = [state.commitSummary.trim(), state.commitDescription.trim()].filter(Boolean).join('\n\n');
+  const commitTargetBranch = status.currentBranch || selectedWorktree?.branch || t('labelCurrentBranch');
+  const commitDisabled =
+    !canRunWorktreeAction ||
+    selectedWorktree?.isLocked === true ||
+    dirtyFileCount === 0 ||
+    state.commitSummary.trim() === '' ||
+    typeof gitApi?.commit !== 'function';
   const createDisabled =
     !canRunRepositoryAction ||
     state.createBranchName.trim() === '' ||
@@ -260,11 +730,43 @@ const App = (): ReactElement => {
     state.createBaseRef.trim() === '';
   const removeDisabled =
     !canRunWorktreeAction || selectedWorktree?.isMainWorktree === true || selectedWorktree?.isLocked === true;
+  const cherryPickDisabled =
+    !canRunWorktreeAction ||
+    selectedCommit === null ||
+    state.isLoading ||
+    selectedWorktree?.isLocked === true ||
+    typeof gitApi?.cherryPick !== 'function';
+  const abortCherryPickDisabled =
+    !canRunWorktreeAction ||
+    state.isLoading ||
+    selectedWorktree?.isLocked === true ||
+    typeof gitApi?.abortCherryPick !== 'function';
+  const selectedChangedFile =
+    state.selectedChangedFilePath === '' || state.selectedChangedFileScope === ''
+      ? null
+      : {
+          filePath: state.selectedChangedFilePath,
+          diffScope: state.selectedChangedFileScope
+        };
+  const shouldShowOperationMessage =
+    state.isLoading && state.operation !== null && !['open', 'refresh'].includes(state.operation);
+
+  const setLanguage = (language: Language): void => {
+    writeLanguage(language);
+    setState((current) => ({
+      ...current,
+      language
+    }));
+  };
+
+  const getOperationCompleteMessage = (operation: 'fetch' | 'pull' | 'push'): string =>
+    state.language === 'ko' ? `${t(OPERATION_LABEL_KEYS[operation])} 완료.` : `${t(OPERATION_LABEL_KEYS[operation])} complete.`;
 
   const setRepositoryPath = (repositoryPath: string): void => {
     setState((current) => ({
       ...current,
       repositoryPath,
+      repositoryMenuOpen: true,
       errorMessage: null,
       successMessage: null
     }));
@@ -299,7 +801,7 @@ const App = (): ReactElement => {
           ...current,
           isLoading: false,
           operation: null,
-          errorMessage: getErrorMessage(error),
+          errorMessage: getErrorMessage(error, t('errorGitCommandFailed')),
           successMessage: null
         }));
       }
@@ -307,26 +809,72 @@ const App = (): ReactElement => {
     []
   );
 
-  const openRepository = (): void => {
-    const repositoryPath = state.repositoryPath.trim();
+  const openRepository = async (): Promise<void> => {
+    const gitApiForOperation = getGitApi();
+    let repositoryPath = state.repositoryPath.trim();
 
-    if (repositoryPath === '') {
+    if (gitApiForOperation === null) {
       setState((current) => ({
         ...current,
-        errorMessage: '저장소를 열기 전에 경로를 입력하세요.',
+        errorMessage: t('errorGitApiUnavailable'),
         successMessage: null
       }));
       return;
     }
 
-    void runOperation('open', () => readRepository(repositoryPath, ''), '저장소를 열었습니다.');
+    if (repositoryPath === '') {
+      const selection = await unwrapIpcResult(gitApiForOperation.selectRepositoryDirectory());
+
+      if (selection.path === null) {
+        return;
+      }
+
+      repositoryPath = selection.path;
+      setRepositoryPath(repositoryPath);
+    }
+
+    void runOperation(
+      'open',
+      async () => {
+        const repositoryState = await readRepository(repositoryPath, '', t);
+
+        return {
+          ...repositoryState,
+          repositoryMenuOpen: false,
+          recentRepositories: addRecentRepositoryPath(state.recentRepositories, repositoryState.repositoryPath)
+        };
+      },
+      t('successOpenRepository')
+    );
+  };
+
+  const switchRepository = (repositoryPath: string): void => {
+    setState((current) => ({
+      ...current,
+      repositoryPath,
+      repositoryMenuOpen: false
+    }));
+
+    void runOperation(
+      'open',
+      async () => {
+        const repositoryState = await readRepository(repositoryPath, '', t);
+
+        return {
+          ...repositoryState,
+          repositoryMenuOpen: false,
+          recentRepositories: addRecentRepositoryPath(state.recentRepositories, repositoryState.repositoryPath)
+        };
+      },
+      t('successSwitchRepository')
+    );
   };
 
   const refreshRepository = (): void => {
     void runOperation(
       'refresh',
-      () => readRepository(state.repositoryPath, state.selectedWorktreePath),
-      '저장소 상태를 새로고침했습니다.'
+      () => readRepository(state.repositoryPath, state.selectedWorktreePath, t),
+      t('successRefreshRepository')
     );
   };
 
@@ -337,7 +885,7 @@ const App = (): ReactElement => {
         const gitApiForOperation = getGitApi();
 
         if (gitApiForOperation === null) {
-          throw new Error('Preload Git API가 아직 준비되지 않았습니다.');
+          throw new Error(t('errorGitApiUnavailable'));
         }
 
         if (operation === 'fetch') {
@@ -352,9 +900,9 @@ const App = (): ReactElement => {
           await unwrapIpcResult(gitApiForOperation.push(state.selectedWorktreePath));
         }
 
-        return readRepository(state.repositoryPath, state.selectedWorktreePath);
+        return readRepository(state.repositoryPath, state.selectedWorktreePath, t);
       },
-      `${OPERATION_LABELS[operation]} 완료.`
+      getOperationCompleteMessage(operation)
     );
   };
 
@@ -365,17 +913,209 @@ const App = (): ReactElement => {
         const gitApiForOperation = getGitApi();
 
         if (gitApiForOperation === null) {
-          throw new Error('Preload Git API가 아직 준비되지 않았습니다.');
+          throw new Error(t('errorGitApiUnavailable'));
         }
 
-        const details = await readWorktreeDetails(gitApiForOperation, worktreePath);
+        const details = await readWorktreeDetails(gitApiForOperation, worktreePath, t);
 
         return {
           selectedWorktreePath: worktreePath,
           ...details
         };
       },
-      '워크스페이스 정보를 새로고침했습니다.'
+      t('successRefreshRepository')
+    );
+  };
+
+  const selectCommit = (commitSha: string): void => {
+    setState((current) => ({
+      ...current,
+      selectedCommitSha: commitSha,
+      commitFiles: [],
+      selectedCommitFilePath: '',
+      commitDiff: '',
+      historyDetailsMessage: null,
+      isHistoryDetailsLoading: true,
+      errorMessage: null,
+      successMessage: null
+    }));
+
+    const gitApiForOperation = getGitApi();
+
+    if (gitApiForOperation === null) {
+      setState((current) => ({
+        ...current,
+        isHistoryDetailsLoading: false,
+        errorMessage: t('errorGitApiUnavailable')
+      }));
+      return;
+    }
+
+    void readCommitDetails(gitApiForOperation, state.selectedWorktreePath, commitSha, '', t)
+      .then((details) => {
+        setState((current) => ({
+          ...current,
+          ...details,
+          isHistoryDetailsLoading: false
+        }));
+      })
+      .catch((error: unknown) => {
+        setState((current) => ({
+          ...current,
+          isHistoryDetailsLoading: false,
+          errorMessage: getErrorMessage(error, t('errorGitCommandFailed'))
+        }));
+      });
+  };
+
+  const selectChangedFile = (selection: ChangedFileSelection): void => {
+    const gitApiForOperation = getGitApi();
+
+    setState((current) => ({
+      ...current,
+      selectedChangedFilePath: selection.filePath,
+      selectedChangedFileScope: selection.diffScope,
+      changedFileDiff: '',
+      changesDetailsMessage: null,
+      isChangedFileDiffLoading: true,
+      errorMessage: null,
+      successMessage: null
+    }));
+
+    if (gitApiForOperation === null) {
+      setState((current) => ({
+        ...current,
+        isChangedFileDiffLoading: false,
+        errorMessage: t('errorGitApiUnavailable')
+      }));
+      return;
+    }
+
+    void readChangedFileDiff(gitApiForOperation, state.selectedWorktreePath, selection)
+      .then((details) => {
+        setState((current) => ({
+          ...(current.selectedWorktreePath === state.selectedWorktreePath &&
+          current.selectedChangedFilePath === selection.filePath &&
+          current.selectedChangedFileScope === selection.diffScope
+            ? {
+                ...current,
+                ...details,
+                isChangedFileDiffLoading: false
+              }
+            : current)
+        }));
+      })
+      .catch((error: unknown) => {
+        setState((current) => ({
+          ...(current.selectedWorktreePath === state.selectedWorktreePath &&
+          current.selectedChangedFilePath === selection.filePath &&
+          current.selectedChangedFileScope === selection.diffScope
+            ? {
+                ...current,
+                isChangedFileDiffLoading: false,
+                errorMessage: getErrorMessage(error, t('errorGitCommandFailed'))
+              }
+            : current)
+        }));
+      });
+  };
+
+  const selectCommitFile = (filePath: string): void => {
+    const gitApiForOperation = getGitApi();
+
+    setState((current) => ({
+      ...current,
+      selectedCommitFilePath: filePath,
+      commitDiff: '',
+      historyDetailsMessage: null,
+      isHistoryDetailsLoading: true,
+      errorMessage: null,
+      successMessage: null
+    }));
+
+    if (gitApiForOperation === null) {
+      setState((current) => ({
+        ...current,
+        isHistoryDetailsLoading: false,
+        errorMessage: t('errorGitApiUnavailable')
+      }));
+      return;
+    }
+
+    void readCommitDetails(gitApiForOperation, state.selectedWorktreePath, state.selectedCommitSha, filePath, t)
+      .then((details) => {
+        setState((current) => ({
+          ...current,
+          ...details,
+          isHistoryDetailsLoading: false
+        }));
+      })
+      .catch((error: unknown) => {
+        setState((current) => ({
+          ...current,
+          isHistoryDetailsLoading: false,
+          errorMessage: getErrorMessage(error, t('errorGitCommandFailed'))
+        }));
+      });
+  };
+
+  const cherryPickCommit = (): void => {
+    const commitSha = selectedCommit?.sha ?? '';
+
+    void runOperation(
+      'cherryPick',
+      async () => {
+        const gitApiForOperation = getGitApi();
+
+        if (gitApiForOperation === null || typeof gitApiForOperation.cherryPick !== 'function') {
+          throw new Error(t('errorCherryPickUnavailable'));
+        }
+
+        await unwrapIpcResult(gitApiForOperation.cherryPick(state.selectedWorktreePath, commitSha));
+
+        return readRepository(state.repositoryPath, state.selectedWorktreePath, t);
+      },
+      t('successCherryPick')
+    );
+  };
+
+  const abortCherryPick = (): void => {
+    void runOperation(
+      'abortCherryPick',
+      async () => {
+        const gitApiForOperation = getGitApi();
+
+        if (gitApiForOperation === null || typeof gitApiForOperation.abortCherryPick !== 'function') {
+          throw new Error(t('errorAbortCherryPickUnavailable'));
+        }
+
+        await unwrapIpcResult(gitApiForOperation.abortCherryPick(state.selectedWorktreePath));
+
+        return readRepository(state.repositoryPath, state.selectedWorktreePath, t);
+      },
+      t('successAbortCherryPick')
+    );
+  };
+
+  const commitChanges = (): void => {
+    void runOperation(
+      'commit',
+      async () => {
+        const gitApiForOperation = getGitApi();
+
+        if (gitApiForOperation === null || typeof gitApiForOperation.commit !== 'function') {
+          throw new Error(t('errorCommitUnavailable'));
+        }
+
+        await unwrapIpcResult(gitApiForOperation.commit(state.selectedWorktreePath, commitMessage));
+
+        return {
+          ...(await readRepository(state.repositoryPath, state.selectedWorktreePath, t)),
+          commitSummary: '',
+          commitDescription: ''
+        };
+      },
+      t('successCommit')
     );
   };
 
@@ -387,7 +1127,7 @@ const App = (): ReactElement => {
         const createdPath = state.createWorktreePath.trim();
 
         if (gitApiForOperation === null) {
-          throw new Error('Preload Git API가 아직 준비되지 않았습니다.');
+          throw new Error(t('errorGitApiUnavailable'));
         }
 
         await unwrapIpcResult(
@@ -400,13 +1140,13 @@ const App = (): ReactElement => {
         );
 
         return {
-          ...(await readRepository(state.repositoryPath, createdPath)),
+          ...(await readRepository(state.repositoryPath, createdPath, t)),
           dialogMode: null,
           createBranchName: '',
           createWorktreePath: ''
         };
       },
-      'Worktree를 생성했습니다.'
+      t('successCreateWorktree')
     );
   };
 
@@ -419,7 +1159,7 @@ const App = (): ReactElement => {
         const gitApiForOperation = getGitApi();
 
         if (gitApiForOperation === null) {
-          throw new Error('Preload Git API가 아직 준비되지 않았습니다.');
+          throw new Error(t('errorGitApiUnavailable'));
         }
 
         await unwrapIpcResult(
@@ -427,50 +1167,124 @@ const App = (): ReactElement => {
         );
 
         return {
-          ...(await readRepository(state.repositoryPath, '')),
+          ...(await readRepository(state.repositoryPath, '', t)),
           dialogMode: null,
           removeForce: false
         };
       },
-      'Worktree를 삭제했습니다.'
+      t('successRemoveWorktree')
     );
   };
 
   return (
     <main className="app-shell">
-      <aside className="sidebar" aria-label="저장소와 worktree 탐색">
+      <aside className="sidebar" aria-label={`${t('labelRepository')} / ${t('labelWorktree')}`}>
         <section className="repository-panel">
-          <label className="field-label" htmlFor="repository-path">
-            저장소 경로
-          </label>
-          <div className="path-row">
-            <input
-              autoComplete="off"
-              className="text-input"
-              disabled={state.isLoading}
-              id="repository-path"
-              onChange={(event) => setRepositoryPath(event.target.value)}
-              placeholder="/Users/name/project"
-              type="text"
-              value={state.repositoryPath}
-            />
-            <button
-              className="primary-button"
-              disabled={!hasGitApi || state.isLoading}
-              onClick={openRepository}
-              title={hasGitApi ? '저장소 경로 열기' : 'Preload Git API 대기 중'}
-              type="button"
-            >
-              열기
-            </button>
+          <div className="section-title-row">
+            <h2>{t('labelRepository')}</h2>
           </div>
 
-          {!hasGitApi ? <p className="hint-text">Git API를 준비하는 중입니다.</p> : null}
+          <button
+            aria-expanded={state.repositoryMenuOpen}
+            className="selector-trigger"
+            disabled={state.isLoading}
+            onClick={() =>
+              setState((current) => ({
+                ...current,
+                repositoryMenuOpen: !current.repositoryMenuOpen,
+              }))
+            }
+            type="button"
+          >
+            <span className="selector-trigger__main">
+              <span className="selector-trigger__name">
+                {hasRepository ? getRepositoryName(state.repositoryPath) : t('emptySelectRepository')}
+              </span>
+              <span className="selector-trigger__path">
+                {hasRepository ? getShortPath(state.repositoryPath) : t('emptyOpenLocalRepository')}
+              </span>
+            </span>
+            <span className="selector-trigger__chevron">{state.repositoryMenuOpen ? '▲' : '▼'}</span>
+          </button>
+
+          {state.repositoryMenuOpen ? (
+            <div className="selector-menu" role="presentation">
+              <label className="field-label" htmlFor="repository-path">
+                {t('labelRepositoryPath')}
+              </label>
+              <div className="path-row">
+                <input
+                  autoComplete="off"
+                  className="text-input"
+                  disabled={state.isLoading}
+                  id="repository-path"
+                  onChange={(event) => setRepositoryPath(event.target.value)}
+                  placeholder={t('pathPlaceholder')}
+                  type="text"
+                  value={state.repositoryPath}
+                />
+                <button
+                  className="primary-button"
+                  disabled={state.isLoading}
+                  onClick={() => {
+                    void openRepository();
+                  }}
+                  title={t('titleOpenRepository')}
+                  type="button"
+                >
+                  {t('actionOpen')}
+                </button>
+              </div>
+
+              <input
+                aria-label={t('labelRepositorySearch')}
+                className="text-input"
+                onChange={(event) =>
+                  setState((current) => ({
+                    ...current,
+                    repositoryFilter: event.target.value
+                  }))
+                }
+                placeholder={t('repositoryFilterPlaceholder')}
+                type="search"
+                value={state.repositoryFilter}
+              />
+
+              {state.recentRepositories.length > 0 ? (
+                <div aria-label={t('labelRepository')} className="repository-list" role="listbox">
+                  {filteredRecentRepositories.map((repositoryPath) => {
+                    const isSelected = repositoryPath === state.repositoryPath;
+
+                    return (
+                      <button
+                        aria-selected={isSelected}
+                        className={`repository-row${isSelected ? ' repository-row--selected' : ''}`}
+                        disabled={state.isLoading}
+                        key={repositoryPath}
+                        onClick={() => switchRepository(repositoryPath)}
+                        role="option"
+                        title={repositoryPath}
+                        type="button"
+                      >
+                        <span className="repository-row__name">{getRepositoryName(repositoryPath)}</span>
+                        <span className="repository-row__path">{getShortPath(repositoryPath)}</span>
+                      </button>
+                    );
+                  })}
+                  {filteredRecentRepositories.length === 0 ? (
+                    <div className="empty-inline">{t('emptyNoFilteredRepositories')}</div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="empty-inline">{t('emptyNoRecentRepositories')}</div>
+              )}
+            </div>
+          ) : null}
         </section>
 
         <section className="worktree-panel">
           <div className="section-title-row">
-            <h2>워크스페이스</h2>
+            <h2>{t('labelWorktree')}</h2>
             <button
               className="compact-button"
               disabled={!canRunRepositoryAction}
@@ -482,28 +1296,36 @@ const App = (): ReactElement => {
                   successMessage: null
                 }))
               }
-              title="Worktree 생성"
+              title={t('titleCreateWorktree')}
               type="button"
             >
-              새로 만들기
+              {t('actionCreateNew')}
             </button>
           </div>
 
-          {state.isLoading && state.operation === 'open' ? (
-            <div className="empty-state">저장소 worktree를 불러오는 중...</div>
-          ) : null}
-
-          {!state.isLoading && hasRepository && state.worktrees.length === 0 ? (
-            <div className="empty-state">이 저장소에서 worktree를 찾지 못했습니다.</div>
-          ) : null}
-
           {!hasRepository ? (
-            <div className="empty-state">워크스페이스를 보려면 저장소 경로를 여세요.</div>
+            <div className="empty-state">{t('emptyNoRepositoryForWorktrees')}</div>
           ) : null}
 
-          {state.worktrees.length > 0 ? (
-            <div aria-label="Worktree 선택" className="worktree-list" role="listbox">
-              {state.worktrees.map((worktree) => {
+          {hasRepository ? (
+            <div className="source-list-panel">
+              <input
+                aria-label={t('labelWorktreeSearch')}
+                className="text-input source-list-search"
+                disabled={state.isLoading || state.worktrees.length === 0}
+                onChange={(event) =>
+                  setState((current) => ({
+                    ...current,
+                    worktreeFilter: event.target.value
+                  }))
+                }
+                placeholder={t('worktreeFilterPlaceholder')}
+                type="search"
+                value={state.worktreeFilter}
+              />
+
+              <div aria-label={t('worktreeList')} className="worktree-list" role="listbox">
+              {filteredWorktrees.map((worktree) => {
                 const isSelected = worktree.path === state.selectedWorktreePath;
                 const tone = worktree.isLocked ? 'locked' : worktree.hasChanges ? 'warning' : 'neutral';
 
@@ -522,13 +1344,19 @@ const App = (): ReactElement => {
                       <span className="worktree-row__path">{getShortPath(worktree.path)}</span>
                     </span>
                     <span className="worktree-row__meta">
-                      {worktree.isMainWorktree ? <StatusPill label="Main" tone="neutral" /> : null}
-                      {worktree.hasChanges ? <StatusPill label="변경 있음" tone="warning" /> : null}
-                      {worktree.isLocked ? <StatusPill label="잠김" tone={tone} /> : null}
+                      {worktree.isMainWorktree ? <StatusPill label={t('labelMain')} tone="neutral" /> : null}
+                      {worktree.hasChanges ? <StatusPill label={t('statusHasChanges')} tone="warning" /> : null}
+                      {worktree.isLocked ? <StatusPill label={t('labelLocked')} tone={tone} /> : null}
                     </span>
                   </button>
                 );
               })}
+              {filteredWorktrees.length === 0 ? (
+                <div className="empty-inline">
+                  {state.worktrees.length === 0 ? t('emptyNoWorktrees') : t('emptyNoFilteredWorktrees')}
+                </div>
+              ) : null}
+            </div>
             </div>
           ) : null}
         </section>
@@ -537,38 +1365,56 @@ const App = (): ReactElement => {
       <section className="workspace">
         <header className="workspace-header">
           <div className="workspace-heading">
-            <p className="eyebrow">{hasRepository ? state.repositoryPath : '열린 저장소 없음'}</p>
-            <h2>{selectedWorktree?.branch ?? '워크스페이스를 선택하세요'}</h2>
+            <p className="eyebrow">{hasRepository ? state.repositoryPath : t('emptyNoRepository')}</p>
+            <h2>{selectedWorktree?.branch ?? t('emptySelectWorkspace')}</h2>
             <div className="workspace-meta">
-              {selectedWorktree !== null ? <span>{selectedWorktree.path}</span> : null}
+              {shouldShowSelectedWorktreePath ? <span>{selectedWorktree.path}</span> : null}
               {status.currentBranch !== '' ? <StatusPill label={status.currentBranch} tone="neutral" /> : null}
               {status.ahead > 0 ? <StatusPill label={`Ahead ${status.ahead}`} tone="warning" /> : null}
               {status.behind > 0 ? <StatusPill label={`Behind ${status.behind}`} tone="warning" /> : null}
-              {isDirty ? <StatusPill label={`변경 ${dirtyFileCount}개`} tone="warning" /> : null}
-              {selectedWorktree?.isLocked === true ? <StatusPill label="잠김" tone="locked" /> : null}
+              {isDirty ? <StatusPill label={`${t('statusChanged')} ${dirtyFileCount}`} tone="warning" /> : null}
+              {selectedWorktree?.isLocked === true ? <StatusPill label={t('labelLocked')} tone="locked" /> : null}
             </div>
           </div>
 
-          <div aria-label="동기화 작업" className="toolbar">
-            <ToolbarButton disabled={!canRunRepositoryAction} onClick={refreshRepository} title="저장소 상태 새로고침">
-              새로고침
+          <div aria-label={t('labelSyncActions')} className="toolbar">
+            <div className="language-toggle" aria-label="Language">
+              <button
+                aria-pressed={state.language === 'ko'}
+                className="language-toggle__button"
+                onClick={() => setLanguage('ko')}
+                type="button"
+              >
+                {t('languageKorean')}
+              </button>
+              <button
+                aria-pressed={state.language === 'en'}
+                className="language-toggle__button"
+                onClick={() => setLanguage('en')}
+                type="button"
+              >
+                {t('languageEnglish')}
+              </button>
+            </div>
+            <ToolbarButton disabled={!canRunRepositoryAction} onClick={refreshRepository} title={t('titleRefresh')}>
+              {t('actionRefresh')}
             </ToolbarButton>
-            <ToolbarButton disabled={!canRunRepositoryAction} onClick={() => runSyncAction('fetch')} title="원격 ref Fetch">
-              Fetch
+            <ToolbarButton disabled={!canRunRepositoryAction} onClick={() => runSyncAction('fetch')} title={t('titleFetch')}>
+              {t('actionFetch')}
             </ToolbarButton>
             <ToolbarButton
               disabled={!canRunWorktreeAction || selectedWorktree?.isLocked === true}
               onClick={() => runSyncAction('pull')}
-              title="선택한 worktree로 Pull"
+              title={t('titlePull')}
             >
-              Pull
+              {t('actionPull')}
             </ToolbarButton>
             <ToolbarButton
               disabled={!canRunWorktreeAction || selectedWorktree?.isLocked === true}
               onClick={() => runSyncAction('push')}
-              title="선택한 브랜치 Push"
+              title={t('titlePush')}
             >
-              Push
+              {t('actionPush')}
             </ToolbarButton>
             <ToolbarButton
               disabled={removeDisabled}
@@ -580,21 +1426,33 @@ const App = (): ReactElement => {
                   successMessage: null
                 }))
               }
-              title="선택한 worktree 삭제"
+              title={t('actionRemoveWorktree')}
               tone="danger"
             >
-              삭제
+              {t('actionDelete')}
             </ToolbarButton>
           </div>
         </header>
 
         {state.errorMessage !== null ? <div className="message message--error">{state.errorMessage}</div> : null}
         {state.successMessage !== null ? <div className="message message--success">{state.successMessage}</div> : null}
-        {state.isLoading ? (
-          <div className="message message--loading">{state.operation !== null ? OPERATION_LABELS[state.operation] : 'Git 작업'} 진행 중...</div>
+        {shouldShowOperationMessage ? (
+          <div className="message message--loading">
+            {state.operation !== null ? t(OPERATION_LABEL_KEYS[state.operation]) : t('operationRunningFallback')}{' '}
+            {t('statusLoadingSuffix')}
+          </div>
         ) : null}
 
-        <div aria-label="워크스페이스 보기" className="tab-bar" role="tablist">
+        <div aria-label={t('labelWorkspaceViews')} className="tab-bar" role="tablist">
+          <button
+            aria-selected={state.activeTab === 'worktrees'}
+            className={`tab-button${state.activeTab === 'worktrees' ? ' tab-button--active' : ''}`}
+            onClick={() => setState((current) => ({ ...current, activeTab: 'worktrees' }))}
+            role="tab"
+            type="button"
+          >
+            {t('tabWorktrees')}
+          </button>
           <button
             aria-selected={state.activeTab === 'changes'}
             className={`tab-button${state.activeTab === 'changes' ? ' tab-button--active' : ''}`}
@@ -602,7 +1460,7 @@ const App = (): ReactElement => {
             role="tab"
             type="button"
           >
-            변경 사항
+            {t('tabChanges')}
           </button>
           <button
             aria-selected={state.activeTab === 'history'}
@@ -611,22 +1469,191 @@ const App = (): ReactElement => {
             role="tab"
             type="button"
           >
-            히스토리
+            {t('tabHistory')}
           </button>
         </div>
+
+        {state.activeTab === 'worktrees' ? (
+          <section className="content-panel" role="tabpanel">
+            {!hasRepository ? (
+              <div className="empty-state empty-state--large">{t('emptyNoRepositoryForWorktrees')}</div>
+            ) : state.worktrees.length === 0 ? (
+              <div className="empty-state empty-state--large">{t('emptyNoWorktrees')}</div>
+            ) : (
+              <section className="worktree-overview" aria-label={t('worktreeOverview')}>
+                <header className="worktree-overview__header">
+                  <div>
+                    <h2>Worktree</h2>
+                    <p>
+                      {state.worktrees.length} {t('worktreeCount')} · {t('worktreeCurrentSelection')}:{' '}
+                      {selectedWorktree?.branch ?? t('commonNone')}
+                    </p>
+                  </div>
+                  <button
+                    className="primary-button"
+                    disabled={!canRunRepositoryAction}
+                    onClick={() =>
+                      setState((current) => ({
+                        ...current,
+                        dialogMode: 'create',
+                        errorMessage: null,
+                        successMessage: null
+                      }))
+                    }
+                    type="button"
+                  >
+                    새로 만들기
+                  </button>
+                </header>
+                <div className="worktree-overview-list">
+                  {state.worktrees.map((worktree) => {
+                    const isSelected = worktree.path === state.selectedWorktreePath;
+                    const rowRemoveDisabled =
+                      !canRunRepositoryAction || worktree.isMainWorktree || worktree.isLocked || state.isLoading;
+
+                    return (
+                      <WorktreeOverviewRow
+                        isRemoveDisabled={rowRemoveDisabled}
+                        isSelected={isSelected}
+                        key={worktree.id}
+                        onRemove={() =>
+                          setState((current) => ({
+                            ...current,
+                            selectedWorktreePath: worktree.path,
+                            dialogMode: 'remove',
+                            errorMessage: null,
+                            successMessage: null
+                          }))
+                        }
+                        onSelect={() => selectWorktree(worktree.path)}
+                        worktree={worktree}
+                        labels={{
+                          deleteTitle: t('titleDeleteWorktree'),
+                          hasChanges: t('statusHasChanges'),
+                          locked: t('labelLocked'),
+                          main: t('labelMain'),
+                          selected: t('labelSelected')
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+          </section>
+        ) : null}
 
         {state.activeTab === 'changes' ? (
           <section className="content-panel" role="tabpanel">
             {!hasSelectedWorktree ? (
-              <div className="empty-state empty-state--large">변경 사항을 보려면 워크스페이스를 선택하세요.</div>
+              <div className="empty-state empty-state--large">{t('emptySelectWorkspaceForChanges')}</div>
             ) : dirtyFileCount === 0 ? (
-              <div className="empty-state empty-state--large">이 워크스페이스에는 로컬 변경 사항이 없습니다.</div>
+              <div className="empty-state empty-state--large">{t('changesNoLocalChanges')}</div>
             ) : (
-              <div className="changes-grid">
-                <FileGroup files={status.conflicts} title="충돌" tone="conflicts" />
-                <FileGroup files={status.staged} title="스테이지됨" tone="staged" />
-                <FileGroup files={status.unstaged} title="스테이지 안 됨" tone="unstaged" />
-                <FileGroup files={status.untracked} title="추적 안 됨" tone="untracked" />
+              <div className="changes-layout">
+                <div className="changes-sidebar">
+                  <div className="changes-file-list" aria-label={t('changesFileList')}>
+                    <FileGroup
+                      files={status.conflicts}
+                      emptyLabel={t('commonNoFiles')}
+                      onSelect={selectChangedFile}
+                      selectedFilePath={state.selectedChangedFilePath}
+                      selectedScope={state.selectedChangedFileScope}
+                      title={t('changesConflicts')}
+                      tone="conflicts"
+                    />
+                    <FileGroup
+                      files={status.staged}
+                      emptyLabel={t('commonNoFiles')}
+                      onSelect={selectChangedFile}
+                      selectedFilePath={state.selectedChangedFilePath}
+                      selectedScope={state.selectedChangedFileScope}
+                      title={t('changesStaged')}
+                      tone="staged"
+                    />
+                    <FileGroup
+                      files={status.unstaged}
+                      emptyLabel={t('commonNoFiles')}
+                      onSelect={selectChangedFile}
+                      selectedFilePath={state.selectedChangedFilePath}
+                      selectedScope={state.selectedChangedFileScope}
+                      title={t('changesUnstaged')}
+                      tone="unstaged"
+                    />
+                    <FileGroup
+                      files={status.untracked}
+                      emptyLabel={t('commonNoFiles')}
+                      onSelect={selectChangedFile}
+                      selectedFilePath={state.selectedChangedFilePath}
+                      selectedScope={state.selectedChangedFileScope}
+                      title={t('changesUntracked')}
+                      tone="untracked"
+                    />
+                  </div>
+
+                  <form
+                    className="working-copy-commit-panel"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+
+                      if (!commitDisabled) {
+                        commitChanges();
+                      }
+                    }}
+                  >
+                    <input
+                      aria-label={t('commitSummaryLabel')}
+                      className="commit-summary-input"
+                      disabled={state.isLoading}
+                      onChange={(event) =>
+                        setState((current) => ({
+                          ...current,
+                          commitSummary: event.target.value,
+                          errorMessage: null,
+                          successMessage: null
+                        }))
+                      }
+                      placeholder={t('commitSummaryPlaceholder')}
+                      type="text"
+                      value={state.commitSummary}
+                    />
+                    <textarea
+                      aria-label={t('commitDescriptionLabel')}
+                      className="commit-description-input"
+                      disabled={state.isLoading}
+                      onChange={(event) =>
+                        setState((current) => ({
+                          ...current,
+                          commitDescription: event.target.value,
+                          errorMessage: null,
+                          successMessage: null
+                        }))
+                      }
+                      placeholder={t('commitDescriptionPlaceholder')}
+                      value={state.commitDescription}
+                    />
+                    <button className="commit-action-button" disabled={commitDisabled} type="submit">
+                      {state.operation === 'commit'
+                        ? t('commitWorking')
+                        : `Commit ${dirtyFileCount} files to ${commitTargetBranch}`}
+                    </button>
+                  </form>
+                </div>
+
+                <section className="diff-panel changes-diff-panel" aria-label={t('changesDiffLabel')}>
+                  <header className="commit-panel-header">
+                    <span>{getChangedFileSelectionLabel(selectedChangedFile, t('labelDiff'))}</span>
+                  </header>
+                  {state.isChangedFileDiffLoading ? (
+                    <div className="empty-inline">{t('changesDiffLoading')}</div>
+                  ) : selectedChangedFile === null ? (
+                    <div className="empty-state empty-state--large">{t('changesDiffPlaceholder')}</div>
+                  ) : state.changedFileDiff.trim() === '' ? (
+                    <div className="empty-inline">{state.changesDetailsMessage ?? t('changesNoDiff')}</div>
+                  ) : (
+                    <DiffText diffText={state.changedFileDiff} label={t('changesDiffLabel')} />
+                  )}
+                </section>
               </div>
             )}
           </section>
@@ -635,21 +1662,105 @@ const App = (): ReactElement => {
         {state.activeTab === 'history' ? (
           <section className="content-panel" role="tabpanel">
             {!hasSelectedWorktree ? (
-              <div className="empty-state empty-state--large">커밋 히스토리를 보려면 워크스페이스를 선택하세요.</div>
+              <div className="empty-state empty-state--large">{t('emptySelectWorkspaceForHistory')}</div>
             ) : state.history.length === 0 ? (
-              <div className="empty-state empty-state--large">이 워크스페이스에 불러온 히스토리가 없습니다.</div>
+              <div className="empty-state empty-state--large">{t('emptyNoHistory')}</div>
             ) : (
-              <ol className="history-list">
-                {state.history.map((commit) => (
-                  <li className="history-row" key={commit.sha}>
-                    <span className="history-row__sha">{commit.shortSha}</span>
-                    <span className="history-row__subject">{commit.subject}</span>
-                    <span className="history-row__meta">
-                      {commit.authorName} · {commit.authoredAt}
-                    </span>
-                  </li>
-                ))}
-              </ol>
+              <div className="history-layout">
+                <ol aria-label={t('historyCommitList')} className="history-list">
+                  {state.history.map((commit) => {
+                    const isSelected = commit.sha === state.selectedCommitSha;
+
+                    return (
+                      <li className="history-list__item" key={commit.sha}>
+                        <button
+                          aria-selected={isSelected}
+                          className={`history-row${isSelected ? ' history-row--selected' : ''}`}
+                          onClick={() => selectCommit(commit.sha)}
+                          type="button"
+                        >
+                          <span className="history-row__sha">{commit.shortSha}</span>
+                          <span className="history-row__subject">{commit.subject}</span>
+                          <span className="history-row__meta">
+                            {commit.authorName} · {commit.authoredAt}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+
+                <section className="history-detail" aria-label={t('historyChangedFilesAndDiff')}>
+                  <header className="history-detail__header">
+                    <div className="history-detail__title">
+                      <h2>{selectedCommit?.subject ?? t('commitSelectCommit')}</h2>
+                      {selectedCommit !== null ? (
+                        <p>
+                          {selectedCommit.shortSha} · {selectedCommit.authorName} · {selectedCommit.authoredAt}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="history-detail__actions">
+                      <button
+                        className="toolbar-button"
+                        disabled={cherryPickDisabled}
+                        onClick={cherryPickCommit}
+                        title={t('actionCherryPick')}
+                        type="button"
+                      >
+                        {t('actionCherryPick')}
+                      </button>
+                      <button
+                        className="toolbar-button"
+                        disabled={abortCherryPickDisabled}
+                        onClick={abortCherryPick}
+                        title={t('actionAbort')}
+                        type="button"
+                      >
+                        {t('actionAbort')}
+                      </button>
+                    </div>
+                  </header>
+
+                  <div className="commit-detail-grid">
+                    <section className="commit-file-panel" aria-label={t('commitChangedFiles')}>
+                      <header className="commit-panel-header">
+                        <span>{t('commitChangedFiles')}</span>
+                        <span>{state.commitFiles.length}</span>
+                      </header>
+                      {state.isHistoryDetailsLoading ? (
+                        <div className="empty-inline">{t('commitFileLoading')}</div>
+                      ) : state.commitFiles.length === 0 ? (
+                        <div className="empty-inline">{state.historyDetailsMessage ?? t('commitEmptyFile')}</div>
+                      ) : (
+                        <div className="commit-file-list" role="listbox">
+                          {state.commitFiles.map((file) => (
+                            <CommitFileRow
+                              file={file}
+                              isSelected={file.path === state.selectedCommitFilePath}
+                              key={`${file.status}-${file.previousPath ?? ''}-${file.path}`}
+                              onSelect={() => selectCommitFile(file.path)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </section>
+
+                    <section className="diff-panel" aria-label={t('historyFileDiff')}>
+                      <header className="commit-panel-header">
+                        <span>{state.selectedCommitFilePath || t('labelDiff')}</span>
+                      </header>
+                      {state.isHistoryDetailsLoading ? (
+                        <div className="empty-inline">{t('changesDiffLoading')}</div>
+                      ) : state.commitDiff.trim() === '' ? (
+                        <div className="empty-inline">{state.historyDetailsMessage ?? t('commitNoFileDiff')}</div>
+                      ) : (
+                        <DiffText diffText={state.commitDiff} label={t('historyFileDiff')} />
+                      )}
+                    </section>
+                  </div>
+                </section>
+              </div>
             )}
           </section>
         ) : null}
@@ -660,20 +1771,20 @@ const App = (): ReactElement => {
           <section aria-labelledby="create-worktree-title" className="dialog" role="dialog">
             <header className="dialog__header">
               <div>
-                <h2 id="create-worktree-title">Worktree 생성</h2>
-                <p>기준 ref에서 새 브랜치 워크스페이스를 만듭니다.</p>
+                <h2 id="create-worktree-title">{t('dialogCreateWorktreeTitle')}</h2>
+                <p>{t('dialogCreateWorktreeDescription')}</p>
               </div>
               <button
                 className="icon-button"
                 onClick={() => setState((current) => ({ ...current, dialogMode: null }))}
                 type="button"
               >
-                닫기
+                {t('actionClose')}
               </button>
             </header>
 
             <label className="field-label" htmlFor="create-branch">
-              브랜치 이름
+              {t('dialogBranchName')}
             </label>
             <input
               className="text-input"
@@ -685,7 +1796,7 @@ const App = (): ReactElement => {
             />
 
             <label className="field-label" htmlFor="create-path">
-              Worktree 경로
+              {t('dialogWorktreePath')}
             </label>
             <input
               className="text-input"
@@ -697,7 +1808,7 @@ const App = (): ReactElement => {
             />
 
             <label className="field-label" htmlFor="create-base">
-              기준 ref
+              {t('dialogBaseRef')}
             </label>
             <input
               className="text-input"
@@ -714,10 +1825,10 @@ const App = (): ReactElement => {
                 onClick={() => setState((current) => ({ ...current, dialogMode: null }))}
                 type="button"
               >
-                취소
+                {t('actionCancel')}
               </button>
               <button className="primary-button" disabled={createDisabled} onClick={createWorktree} type="button">
-                생성
+                {t('actionCreate')}
               </button>
             </footer>
           </section>
@@ -729,7 +1840,7 @@ const App = (): ReactElement => {
           <section aria-labelledby="remove-worktree-title" className="dialog" role="dialog">
             <header className="dialog__header">
               <div>
-                <h2 id="remove-worktree-title">Worktree 삭제</h2>
+                <h2 id="remove-worktree-title">{t('dialogRemoveWorktreeTitle')}</h2>
                 <p>{selectedWorktree.path}</p>
               </div>
               <button
@@ -737,12 +1848,12 @@ const App = (): ReactElement => {
                 onClick={() => setState((current) => ({ ...current, dialogMode: null }))}
                 type="button"
               >
-                닫기
+                {t('actionClose')}
               </button>
             </header>
 
             <div className="danger-panel">
-              선택한 worktree 체크아웃을 삭제합니다. 로컬 변경 사항이 있는 worktree는 삭제 전에 확인해야 합니다.
+              {t('dialogRemoveWorktreeDescription')}
             </div>
 
             <label className="checkbox-row">
@@ -751,7 +1862,7 @@ const App = (): ReactElement => {
                 onChange={(event) => setState((current) => ({ ...current, removeForce: event.target.checked }))}
                 type="checkbox"
               />
-              <span>Git이 로컬 변경 사항을 보고해도 강제로 삭제</span>
+              <span>{t('dialogForceRemove')}</span>
             </label>
 
             <footer className="dialog__footer">
@@ -760,10 +1871,10 @@ const App = (): ReactElement => {
                 onClick={() => setState((current) => ({ ...current, dialogMode: null }))}
                 type="button"
               >
-                취소
+                {t('actionCancel')}
               </button>
               <button className="danger-button" disabled={removeDisabled} onClick={removeWorktree} type="button">
-                Worktree 삭제
+                {t('actionRemoveWorktree')}
               </button>
             </footer>
           </section>

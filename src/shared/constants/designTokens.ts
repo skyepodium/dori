@@ -37,8 +37,8 @@ const primitiveRadii = Object.freeze({
 });
 
 const primitiveTypography = Object.freeze({
-  fontFamily:
-    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily:
+      '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif',
   fontSizeXsPx: 11,
   fontSizeSmPx: 12,
   fontSizeBasePx: 13,
@@ -85,13 +85,15 @@ export const DESIGN_TOKENS = Object.freeze({
     popover: '0 10px 28px rgb(17 24 39 / 12%)'
   }),
   size: Object.freeze({
-    sidebarWidthPx: 304,
+    sidebarWidthPx: 320,
     toolbarHeightPx: 48,
     controlHeightPx: 32,
     compactControlHeightPx: 28,
     iconButtonHeightPx: 30,
-    statusPillRadiusPx: 999,
+    statusPillRadiusPx: 7,
     emptyStateMinHeightPx: 220,
+    selectorMaxHeightPx: 320,
+    sourceListRowHeightPx: 50,
     fileStatusColumnWidthPx: 42,
     historyShaColumnWidthPx: 86,
     historyShaColumnCompactWidthPx: 72,
@@ -158,6 +160,8 @@ export const DESIGN_TOKEN_CSS_VARIABLES = Object.freeze({
   '--size-icon-button-height': `${DESIGN_TOKENS.size.iconButtonHeightPx}px`,
   '--size-status-pill-radius': `${DESIGN_TOKENS.size.statusPillRadiusPx}px`,
   '--size-empty-state-min-height': `${DESIGN_TOKENS.size.emptyStateMinHeightPx}px`,
+  '--size-selector-max-height': `${DESIGN_TOKENS.size.selectorMaxHeightPx}px`,
+  '--size-source-list-row-height': `${DESIGN_TOKENS.size.sourceListRowHeightPx}px`,
   '--size-file-status-column-width': `${DESIGN_TOKENS.size.fileStatusColumnWidthPx}px`,
   '--size-history-sha-column-width': `${DESIGN_TOKENS.size.historyShaColumnWidthPx}px`,
   '--size-history-sha-column-compact-width': `${DESIGN_TOKENS.size.historyShaColumnCompactWidthPx}px`,

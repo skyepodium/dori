@@ -1,4 +1,4 @@
-import type { GitCommit, GitFileChange, GitStatus, Worktree } from '../../shared/types';
+import type { GitBranch, GitCommit, GitCommitFile, GitFileChange, GitStatus, Worktree } from '../../shared/types';
 
 const EMPTY_STATUS: GitStatus = {
   currentBranch: '',
@@ -160,3 +160,33 @@ export const parseHistory = (output: string): GitCommit[] =>
         subject
       };
     });
+
+export const parseCommitFiles = (output: string): GitCommitFile[] =>
+  output
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const [statusToken = '', firstPath = '', secondPath = ''] = line.split('\t');
+      const status = statusToken[0] ?? '';
+
+      if (status === 'R' || status === 'C') {
+        return {
+          path: secondPath,
+          previousPath: firstPath,
+          status
+        };
+      }
+
+      return {
+        path: firstPath,
+        status
+      };
+    })
+    .filter((file) => file.path.length > 0);
+
+export const parseBranches = (output: string): GitBranch[] =>
+  output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((name) => name.length > 0)
+    .map((name) => ({ name }));

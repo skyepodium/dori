@@ -1,9 +1,9 @@
-import type { DoriGitApi } from '../shared/constants/ipc';
+import type { GitClientApi } from '../shared/constants/ipc';
 
 declare global {
   interface Window {
-    dori: {
-      git: DoriGitApi;
+    gitClient: {
+      git: GitClientApi;
     };
   }
 }
