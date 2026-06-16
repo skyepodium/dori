@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react';
 import type { AppIpcResult, GitClientApi } from '../../shared/constants/ipc';
 import type {
   GitChangedFile,
@@ -719,6 +719,7 @@ const App = (): ReactElement => {
     recentRepositories: readRecentRepositoryPaths(),
     language: readLanguage()
   }));
+  const historyDetailsRequestIdRef = useRef(0);
 
   const t = useCallback((key: TranslationKey): string => translate(state.language, key), [state.language]);
   const gitApi = getGitApi();
@@ -966,13 +967,11 @@ const App = (): ReactElement => {
   };
 
   const selectCommit = (commitSha: string): void => {
+    const requestId = historyDetailsRequestIdRef.current + 1;
+    historyDetailsRequestIdRef.current = requestId;
+
     setState((current) => ({
       ...current,
-      selectedCommitSha: commitSha,
-      commitFiles: [],
-      selectedCommitFilePath: '',
-      commitDiff: '',
-      historyDetailsMessage: null,
       isHistoryDetailsLoading: true,
       errorMessage: null,
       successMessage: null
@@ -992,16 +991,25 @@ const App = (): ReactElement => {
     void readCommitDetails(gitApiForOperation, state.selectedWorktreePath, commitSha, '', t)
       .then((details) => {
         setState((current) => ({
-          ...current,
-          ...details,
-          isHistoryDetailsLoading: false
+          ...(historyDetailsRequestIdRef.current === requestId
+            ? {
+                ...current,
+                selectedCommitSha: commitSha,
+                ...details,
+                isHistoryDetailsLoading: false
+              }
+            : current)
         }));
       })
       .catch((error: unknown) => {
         setState((current) => ({
-          ...current,
-          isHistoryDetailsLoading: false,
-          errorMessage: getErrorMessage(error, t('errorGitCommandFailed'))
+          ...(historyDetailsRequestIdRef.current === requestId
+            ? {
+                ...current,
+                isHistoryDetailsLoading: false,
+                errorMessage: getErrorMessage(error, t('errorGitCommandFailed'))
+              }
+            : current)
         }));
       });
   };
@@ -1060,12 +1068,11 @@ const App = (): ReactElement => {
 
   const selectCommitFile = (filePath: string): void => {
     const gitApiForOperation = getGitApi();
+    const requestId = historyDetailsRequestIdRef.current + 1;
+    historyDetailsRequestIdRef.current = requestId;
 
     setState((current) => ({
       ...current,
-      selectedCommitFilePath: filePath,
-      commitDiff: '',
-      historyDetailsMessage: null,
       isHistoryDetailsLoading: true,
       errorMessage: null,
       successMessage: null
@@ -1083,16 +1090,24 @@ const App = (): ReactElement => {
     void readCommitDetails(gitApiForOperation, state.selectedWorktreePath, state.selectedCommitSha, filePath, t)
       .then((details) => {
         setState((current) => ({
-          ...current,
-          ...details,
-          isHistoryDetailsLoading: false
+          ...(historyDetailsRequestIdRef.current === requestId
+            ? {
+                ...current,
+                ...details,
+                isHistoryDetailsLoading: false
+              }
+            : current)
         }));
       })
       .catch((error: unknown) => {
         setState((current) => ({
-          ...current,
-          isHistoryDetailsLoading: false,
-          errorMessage: getErrorMessage(error, t('errorGitCommandFailed'))
+          ...(historyDetailsRequestIdRef.current === requestId
+            ? {
+                ...current,
+                isHistoryDetailsLoading: false,
+                errorMessage: getErrorMessage(error, t('errorGitCommandFailed'))
+              }
+            : current)
         }));
       });
   };
@@ -1789,7 +1804,7 @@ const App = (): ReactElement => {
                         <span>{t('commitChangedFiles')}</span>
                         <span>{state.commitFiles.length}</span>
                       </header>
-                      {state.isHistoryDetailsLoading ? (
+                      {state.isHistoryDetailsLoading && state.commitFiles.length === 0 ? (
                         <LoadingPlaceholder label={t('commitFileLoading')} />
                       ) : state.commitFiles.length === 0 ? (
                         <div className="empty-inline">{state.historyDetailsMessage ?? t('commitEmptyFile')}</div>
@@ -1811,7 +1826,7 @@ const App = (): ReactElement => {
                       <header className="commit-panel-header">
                         <span>{state.selectedCommitFilePath || t('labelDiff')}</span>
                       </header>
-                      {state.isHistoryDetailsLoading ? (
+                      {state.isHistoryDetailsLoading && state.commitDiff.trim() === '' ? (
                         <LoadingPlaceholder label={t('changesDiffLoading')} />
                       ) : state.commitDiff.trim() === '' ? (
                         <div className="empty-inline">{state.historyDetailsMessage ?? t('commitNoFileDiff')}</div>
