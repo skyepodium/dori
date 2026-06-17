@@ -37,7 +37,8 @@ textarea:disabled {
 
 button:focus-visible,
 input:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+.preference-option:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
@@ -60,7 +61,8 @@ textarea:focus-visible {
 }
 
 .repository-panel,
-.worktree-panel {
+.worktree-panel,
+.branch-panel {
   border-bottom: 1px solid var(--color-border);
   padding: var(--space-16);
   position: relative;
@@ -108,6 +110,7 @@ h2 {
 .workspace-meta,
 .repository-row__path,
 .worktree-row__path,
+.branch-row__name,
 .commit-file-row__old-path,
 .commit-file-row__stats,
 .history-detail__header p,
@@ -274,7 +277,8 @@ h2 {
 }
 
 .repository-list,
-.worktree-list {
+.worktree-list,
+.branch-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -289,6 +293,25 @@ h2 {
 
 .repository-list {
   max-height: var(--size-selector-max-height);
+}
+
+.branch-panel {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--space-10);
+  max-height: 220px;
+  min-height: 0;
+}
+
+.branch-list {
+  max-height: 156px;
+}
+
+.section-count {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
 }
 
 .selector-trigger {
@@ -357,7 +380,8 @@ h2 {
 }
 
 .repository-row,
-.worktree-row {
+.worktree-row,
+.branch-row {
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-control);
@@ -369,6 +393,11 @@ h2 {
   padding: var(--space-8) var(--space-10);
   text-align: left;
   width: 100%;
+}
+
+.branch-row {
+  align-items: center;
+  min-height: 34px;
 }
 
 .repository-row {
@@ -389,6 +418,10 @@ h2 {
   box-shadow: inset 3px 0 0 var(--color-action);
 }
 
+.branch-row--current {
+  background: var(--color-action-weak);
+}
+
 .repository-row__name,
 .worktree-row__main {
   display: grid;
@@ -400,6 +433,7 @@ h2 {
 .repository-row__path,
 .worktree-row__branch,
 .worktree-row__path,
+.branch-row__name,
 .file-row__path,
 .commit-file-row__path,
 .commit-file-row__old-path,
@@ -441,7 +475,7 @@ h2 {
   min-height: 0;
 }
 
-.language-toggle {
+.preference-options {
   align-items: center;
   background: var(--color-surface-subtle);
   border: 1px solid var(--color-border);
@@ -451,7 +485,7 @@ h2 {
   padding: var(--space-2);
 }
 
-.language-toggle__button {
+.preference-option {
   background: transparent;
   border: 0;
   border-radius: calc(var(--radius-control) - 2px);
@@ -459,10 +493,10 @@ h2 {
   font-size: var(--font-size-xs);
   font-weight: 700;
   height: 100%;
-  padding: 0 var(--space-8);
+  padding: 0 var(--space-10);
 }
 
-.language-toggle__button[aria-pressed='true'] {
+.preference-option--selected {
   background: var(--color-surface);
   box-shadow: 0 1px 2px rgb(17 24 39 / 12%);
   color: var(--color-text-primary);

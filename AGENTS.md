@@ -94,11 +94,15 @@ When rules conflict, the narrower scoped `AGENTS.md` wins. When changing a rule,
 - When adding or changing copy, keep English and Korean key parity covered by tests.
 - Repository selection uses a dropdown with filtering and internal scrolling for large local inventories.
 - Selecting an existing repository must not reorder the recent repository list.
+- Opening a repository path that is already active must be a no-op: do not duplicate it, reorder it, or trigger a broad refresh/loading flicker.
+- Adding another local repository is distinct from switching to an existing recent repository. Keep those actions visually and behaviorally separate.
 - Worktree selection uses an always-visible source list because switching workspaces is a core workflow.
+- Branches for the selected worktree must be visible in the sidebar without requiring a modal or destructive Git action.
 - Do not add a secondary worktree filter input unless the interaction is redesigned and documented in `/Users/skyepodium/dev/dori/DESIGN.md`.
 - Do not hide worktrees behind a dropdown unless the dropdown is secondary to an always-visible primary worktree navigation.
 - Read-only refresh, worktree switching, and detail loading must preserve the existing screen structure. Avoid broad loading banners, text swaps, or global disabled states unless a mutation or destructive command is actively running.
 - History detail fetches must not clear the visible commit file list or diff before the replacement detail data is ready.
+- Default renderer language follows the system locale on first launch. Persisted user language from Preferences overrides the system locale.
 
 ## Design Token System
 

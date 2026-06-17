@@ -72,10 +72,11 @@ Avoid:
 
 - Repository selector: filtered dropdown with recent local repositories.
 - Worktree navigation: always-visible filtered source list.
+- Branch list: compact sidebar section for the selected worktree's local branches.
 - Workspace header: current repository, selected worktree, branch, sync state, dirty state, and lock state.
 - Primary tabs: Worktrees, Changes, History.
 - Command toolbar: refresh, fetch, pull, push, delete.
-- Dialogs: create worktree and remove worktree.
+- Dialogs: create worktree, remove worktree, and preferences.
 - Feedback layer: success, loading, error, empty, and crash fallback states.
 
 ## Design Principles
@@ -157,7 +158,10 @@ Required states:
 - Clean working tree: after commit, the changes view must show a clear clean state with a title and supporting text.
 - Selectors: repository inventory lives in a filtered dropdown with internal scrolling.
 - Repository order: selecting an existing repository must not reorder the recent repository list.
+- Repository duplication: opening the active repository again is a no-op with no duplicate row, no list reorder, and no broad loading flicker.
+- Multiple repositories: adding a local repository and switching to a recent repository are separate actions.
 - Worktrees: active repository worktrees stay visible in a direct source list without a secondary filter field.
+- Branches: selected worktree branches are visible in a compact sidebar section. The current branch uses selected-row tint, while other branches remain read-only rows.
 - Errors: Git command failures should show command intent and user-actionable copy, not raw stack traces.
 - Crash safety: renderer exceptions fall back to a localized error boundary instead of an all-white window.
 - Success: mutations refresh state and use subtle confirmation.
@@ -178,6 +182,7 @@ Required states:
 
 - Product and developer documentation should be written in English.
 - Renderer UI supports English and Korean.
+- Initial language follows the system locale. Unsupported locales default to English. Preferences stores an explicit language override.
 - Terminology: repository, worktree, workspace, branch, changes, history, commit, fetch, pull, push, cherry-pick.
 - Microcopy should be concise, technical, and calm.
 - Destructive actions must name the target path, worktree, or branch.

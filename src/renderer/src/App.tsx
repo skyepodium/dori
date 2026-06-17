@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react';
 import type { AppIpcResult, GitClientApi } from '../../shared/constants/ipc';
 import type {
+  GitBranch,
   GitChangedFile,
   GitCommit,
   GitDiffScope,
@@ -12,6 +13,7 @@ import type {
 import {
   DEFAULT_LANGUAGE,
   formatCommitActionLabel,
+  getDefaultLanguageForLocale,
   LANGUAGE_STORAGE_KEY,
   isLanguage,
   translate,
@@ -21,9 +23,14 @@ import {
 import { GitAvatar } from './GitAvatar';
 import { getRepositoryOwnerAvatarUrlForAuthor } from './avatar';
 import { unwrapIpcResult } from './ipcResult';
+import {
+  addRecentRepositoryPath,
+  readRecentRepositoryPaths,
+  writeRecentRepositoryPaths
+} from './recentRepositories';
 
 type ActiveTab = 'worktrees' | 'changes' | 'history';
-type DialogMode = 'create' | 'remove' | null;
+type DialogMode = 'create' | 'remove' | 'preferences' | null;
 type OperationName =
   | 'open'
   | 'refresh'
@@ -57,6 +64,7 @@ type RepositoryViewState = {
   repositoryOwnerLogin: string | null;
   repositoryOwnerAvatarUrl: string | null;
   worktrees: Worktree[];
+  branches: GitBranch[];
   selectedWorktreePath: string;
   identity: GitIdentity | null;
   status: GitStatus | null;
@@ -108,6 +116,7 @@ const INITIAL_STATE: AppState = {
   repositoryOwnerLogin: null,
   repositoryOwnerAvatarUrl: null,
   worktrees: [],
+  branches: [],
   selectedWorktreePath: '',
   identity: null,
   status: null,
@@ -142,8 +151,6 @@ const INITIAL_STATE: AppState = {
 };
 
 const HISTORY_LIMIT_COUNT = 50;
-const RECENT_REPOSITORIES_LIMIT_COUNT = 12;
-const RECENT_REPOSITORIES_STORAGE_KEY = 'recentRepositoryPaths';
 const SHORT_PATH_SEGMENT_COUNT = 2;
 const OPERATION_LABEL_KEYS: Record<OperationName, TranslationKey> = {
   open: 'operationOpen',
@@ -181,40 +188,12 @@ const getRepositoryName = (repositoryPath: string): string => {
   return segments.at(-1) ?? repositoryPath;
 };
 
-const readRecentRepositoryPaths = (): string[] => {
-  try {
-    const storedValue = window.localStorage.getItem(RECENT_REPOSITORIES_STORAGE_KEY);
-
-    if (storedValue === null) {
-      return [];
-    }
-
-    const parsedValue: unknown = JSON.parse(storedValue);
-
-    if (!Array.isArray(parsedValue)) {
-      return [];
-    }
-
-    return parsedValue.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
-  } catch (error: unknown) {
-    return [];
-  }
-};
-
-const writeRecentRepositoryPaths = (repositoryPaths: string[]): void => {
-  try {
-    window.localStorage.setItem(RECENT_REPOSITORIES_STORAGE_KEY, JSON.stringify(repositoryPaths));
-  } catch (error: unknown) {
-    return;
-  }
-};
-
 const readLanguage = (): Language => {
   try {
     const storedValue = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
-    return isLanguage(storedValue) ? storedValue : DEFAULT_LANGUAGE;
+    return isLanguage(storedValue) ? storedValue : getDefaultLanguageForLocale(window.navigator.language);
   } catch (error: unknown) {
-    return DEFAULT_LANGUAGE;
+    return getDefaultLanguageForLocale(window.navigator.language);
   }
 };
 
@@ -224,27 +203,6 @@ const writeLanguage = (language: Language): void => {
   } catch (error: unknown) {
     return;
   }
-};
-
-const addRecentRepositoryPath = (repositoryPaths: string[], repositoryPath: string): string[] => {
-  const normalizedPath = repositoryPath.trim();
-
-  if (normalizedPath === '') {
-    return repositoryPaths;
-  }
-
-  if (repositoryPaths.includes(normalizedPath)) {
-    return repositoryPaths;
-  }
-
-  const nextRepositoryPaths = [
-    normalizedPath,
-    ...repositoryPaths
-  ].slice(0, RECENT_REPOSITORIES_LIMIT_COUNT);
-
-  writeRecentRepositoryPaths(nextRepositoryPaths);
-
-  return nextRepositoryPaths;
 };
 
 const getErrorMessage = (error: unknown, fallbackMessage: string): string => {
@@ -365,9 +323,10 @@ const readWorktreeDetails = async (
   gitApi: GitClientApi,
   worktreePath: string,
   t: (key: TranslationKey) => string
-): Promise<Pick<RepositoryViewState, 'identity' | 'status' | 'selectedChangedFilePath' | 'selectedChangedFileScope' | 'changedFileDiff' | 'changesDetailsMessage' | 'history' | 'selectedCommitSha' | 'commitFiles' | 'selectedCommitFilePath' | 'commitDiff' | 'historyDetailsMessage'>> => {
+): Promise<Pick<RepositoryViewState, 'branches' | 'identity' | 'status' | 'selectedChangedFilePath' | 'selectedChangedFileScope' | 'changedFileDiff' | 'changesDetailsMessage' | 'history' | 'selectedCommitSha' | 'commitFiles' | 'selectedCommitFilePath' | 'commitDiff' | 'historyDetailsMessage'>> => {
   if (worktreePath.trim().length === 0) {
     return {
+      branches: [],
       identity: null,
       status: null,
       selectedChangedFilePath: '',
@@ -383,7 +342,8 @@ const readWorktreeDetails = async (
     };
   }
 
-  const [identity, status, history] = await Promise.all([
+  const [branches, identity, status, history] = await Promise.all([
+    unwrapIpcResult(gitApi.listBranches(worktreePath)),
     unwrapIpcResult(gitApi.getIdentity(worktreePath)),
     unwrapIpcResult(gitApi.getStatus(worktreePath)),
     unwrapIpcResult(gitApi.getHistory(worktreePath, HISTORY_LIMIT_COUNT))
@@ -401,6 +361,7 @@ const readWorktreeDetails = async (
       : await readCommitDetails(gitApi, worktreePath, selectedCommitSha, '', t);
 
   return {
+    branches,
     identity,
     status,
     selectedChangedFilePath: '',
@@ -716,7 +677,7 @@ const WorktreeOverviewRow = ({
 const App = (): ReactElement => {
   const [state, setState] = useState<AppState>(() => ({
     ...INITIAL_STATE,
-    recentRepositories: readRecentRepositoryPaths(),
+    recentRepositories: readRecentRepositoryPaths(window.localStorage),
     language: readLanguage()
   }));
   const historyDetailsRequestIdRef = useRef(0);
@@ -848,9 +809,39 @@ const App = (): ReactElement => {
     []
   );
 
-  const openRepository = async (): Promise<void> => {
+  const openRepositoryPath = (repositoryPath: string, successMessage: string | null): void => {
+    if (repositoryPath === state.repositoryPath && state.worktrees.length > 0) {
+      setState((current) => ({
+        ...current,
+        repositoryMenuOpen: false,
+        errorMessage: null,
+        successMessage: null
+      }));
+      return;
+    }
+
+    void runOperation(
+      'open',
+      async () => {
+        const repositoryState = await readRepository(repositoryPath, '', t);
+        const recentRepositories = addRecentRepositoryPath(state.recentRepositories, repositoryState.repositoryPath);
+
+        if (recentRepositories !== state.recentRepositories) {
+          writeRecentRepositoryPaths(window.localStorage, recentRepositories);
+        }
+
+        return {
+          ...repositoryState,
+          repositoryMenuOpen: false,
+          recentRepositories
+        };
+      },
+      successMessage
+    );
+  };
+
+  const addRepositoryFromDirectory = async (): Promise<void> => {
     const gitApiForOperation = getGitApi();
-    let repositoryPath = state.repositoryPath.trim();
 
     if (gitApiForOperation === null) {
       setState((current) => ({
@@ -861,30 +852,31 @@ const App = (): ReactElement => {
       return;
     }
 
-    if (repositoryPath === '') {
-      const selection = await unwrapIpcResult(gitApiForOperation.selectRepositoryDirectory());
+    const selection = await unwrapIpcResult(gitApiForOperation.selectRepositoryDirectory());
 
-      if (selection.path === null) {
-        return;
-      }
-
-      repositoryPath = selection.path;
-      setRepositoryPath(repositoryPath);
+    if (selection.path === null) {
+      return;
     }
 
-    void runOperation(
-      'open',
-      async () => {
-        const repositoryState = await readRepository(repositoryPath, '', t);
+    setState((current) => ({
+      ...current,
+      repositoryPath: selection.path ?? current.repositoryPath,
+      repositoryMenuOpen: true,
+      errorMessage: null,
+      successMessage: null
+    }));
+    openRepositoryPath(selection.path, t('successOpenRepository'));
+  };
 
-        return {
-          ...repositoryState,
-          repositoryMenuOpen: false,
-          recentRepositories: addRecentRepositoryPath(state.recentRepositories, repositoryState.repositoryPath)
-        };
-      },
-      t('successOpenRepository')
-    );
+  const openRepository = (): void => {
+    const repositoryPath = state.repositoryPath.trim();
+
+    if (repositoryPath === '') {
+      void addRepositoryFromDirectory();
+      return;
+    }
+
+    openRepositoryPath(repositoryPath, t('successOpenRepository'));
   };
 
   const switchRepository = (repositoryPath: string): void => {
@@ -894,19 +886,7 @@ const App = (): ReactElement => {
       repositoryMenuOpen: false
     }));
 
-    void runOperation(
-      'open',
-      async () => {
-        const repositoryState = await readRepository(repositoryPath, '', t);
-
-        return {
-          ...repositoryState,
-          repositoryMenuOpen: false,
-          recentRepositories: addRecentRepositoryPath(state.recentRepositories, repositoryState.repositoryPath)
-        };
-      },
-      null
-    );
+    openRepositoryPath(repositoryPath, null);
   };
 
   const refreshRepository = (): void => {
@@ -1288,6 +1268,17 @@ const App = (): ReactElement => {
                   {t('actionOpen')}
                 </button>
               </div>
+              <button
+                className="secondary-button"
+                disabled={!canUseRepositorySelector || isOpeningRepository}
+                onClick={() => {
+                  void addRepositoryFromDirectory();
+                }}
+                title={t('titleOpenAnotherRepository')}
+                type="button"
+              >
+                {t('actionOpenAnotherRepository')}
+              </button>
 
               <input
                 aria-label={t('labelRepositorySearch')}
@@ -1394,6 +1385,31 @@ const App = (): ReactElement => {
             </div>
           ) : null}
         </section>
+
+        <section className="branch-panel">
+          <div className="section-title-row">
+            <h2>{t('labelBranches')}</h2>
+            <span className="section-count">{state.branches.length}</span>
+          </div>
+          {!hasSelectedWorktree ? (
+            <div className="empty-inline">{t('emptySelectWorkspace')}</div>
+          ) : state.branches.length === 0 ? (
+            <div className="empty-inline">{t('emptyNoBranches')}</div>
+          ) : (
+            <div aria-label={t('branchList')} className="branch-list">
+              {state.branches.map((branch) => {
+                const isCurrent = branch.name === status.currentBranch || branch.name === selectedWorktree?.branch;
+
+                return (
+                  <div className={`branch-row${isCurrent ? ' branch-row--current' : ''}`} key={branch.name}>
+                    <span className="branch-row__name">{branch.name}</span>
+                    {isCurrent ? <StatusPill label={t('labelCurrentBranch')} tone="neutral" /> : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </aside>
 
       <section className="workspace">
@@ -1412,24 +1428,20 @@ const App = (): ReactElement => {
           </div>
 
           <div aria-label={t('labelSyncActions')} className="toolbar">
-            <div className="language-toggle" aria-label="Language">
-              <button
-                aria-pressed={state.language === 'ko'}
-                className="language-toggle__button"
-                onClick={() => setLanguage('ko')}
-                type="button"
-              >
-                {t('languageKorean')}
-              </button>
-              <button
-                aria-pressed={state.language === 'en'}
-                className="language-toggle__button"
-                onClick={() => setLanguage('en')}
-                type="button"
-              >
-                {t('languageEnglish')}
-              </button>
-            </div>
+            <ToolbarButton
+              disabled={false}
+              onClick={() =>
+                setState((current) => ({
+                  ...current,
+                  dialogMode: 'preferences',
+                  errorMessage: null,
+                  successMessage: null
+                }))
+              }
+              title={t('titlePreferences')}
+            >
+              {t('actionPreferences')}
+            </ToolbarButton>
             <ToolbarButton disabled={!canRunRepositoryAction} onClick={refreshRepository} title={t('titleRefresh')}>
               {t('actionRefresh')}
             </ToolbarButton>
@@ -1905,6 +1917,58 @@ const App = (): ReactElement => {
               </button>
               <button className="primary-button" disabled={createDisabled} onClick={createWorktree} type="button">
                 {t('actionCreate')}
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
+
+      {state.dialogMode === 'preferences' ? (
+        <div className="dialog-backdrop" role="presentation">
+          <section aria-labelledby="preferences-title" className="dialog" role="dialog">
+            <header className="dialog__header">
+              <div>
+                <h2 id="preferences-title">{t('dialogPreferencesTitle')}</h2>
+                <p>{t('dialogPreferencesDescription')}</p>
+              </div>
+              <button
+                className="icon-button"
+                onClick={() => setState((current) => ({ ...current, dialogMode: null }))}
+                type="button"
+              >
+                {t('actionClose')}
+              </button>
+            </header>
+
+            <span className="field-label">{t('labelLanguage')}</span>
+            <div className="preference-options" role="radiogroup">
+              <button
+                aria-checked={state.language === 'ko'}
+                className={`preference-option${state.language === 'ko' ? ' preference-option--selected' : ''}`}
+                onClick={() => setLanguage('ko')}
+                role="radio"
+                type="button"
+              >
+                {t('languageKorean')}
+              </button>
+              <button
+                aria-checked={state.language === 'en'}
+                className={`preference-option${state.language === 'en' ? ' preference-option--selected' : ''}`}
+                onClick={() => setLanguage('en')}
+                role="radio"
+                type="button"
+              >
+                {t('languageEnglish')}
+              </button>
+            </div>
+
+            <footer className="dialog__footer">
+              <button
+                className="primary-button"
+                onClick={() => setState((current) => ({ ...current, dialogMode: null }))}
+                type="button"
+              >
+                {t('actionClose')}
               </button>
             </footer>
           </section>

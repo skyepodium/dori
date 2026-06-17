@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LANGUAGE, formatCommitActionLabel, isLanguage, translate, type TranslationKey } from './i18n';
+import {
+  DEFAULT_LANGUAGE,
+  formatCommitActionLabel,
+  getDefaultLanguageForLocale,
+  isLanguage,
+  translate,
+  type TranslationKey
+} from './i18n';
 
 const TRANSLATION_KEYS: TranslationKey[] = [
   'labelRepository',
@@ -27,6 +34,13 @@ describe('renderer i18n', () => {
     expect(isLanguage(DEFAULT_LANGUAGE)).toBe(true);
     expect(isLanguage('fr')).toBe(false);
     expect(isLanguage(null)).toBe(false);
+  });
+
+  it('uses Korean only for Korean system locales', () => {
+    expect(getDefaultLanguageForLocale('ko-KR')).toBe('ko');
+    expect(getDefaultLanguageForLocale('en-US')).toBe('en');
+    expect(getDefaultLanguageForLocale('ja-JP')).toBe('en');
+    expect(DEFAULT_LANGUAGE).toBe('en');
   });
 
   it('formats commit action labels in the active language', () => {

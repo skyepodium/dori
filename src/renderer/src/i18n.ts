@@ -12,11 +12,14 @@ const TRANSLATIONS = {
     actionCreateNew: 'New worktree',
     actionDelete: 'Delete',
     actionFetch: 'Fetch',
+    actionOpenAnotherRepository: 'Add repository',
     actionOpen: 'Open',
+    actionPreferences: 'Preferences',
     actionPull: 'Pull',
     actionPush: 'Push',
     actionRefresh: 'Refresh',
     actionRemoveWorktree: 'Delete worktree',
+    branchList: 'Branch list',
     changesConflicts: 'Conflicts',
     changesDiffLabel: 'Changed file diff',
     changesDiffLoading: 'Loading diff...',
@@ -48,11 +51,14 @@ const TRANSLATIONS = {
     dialogCreateWorktreeDescription: 'Create a new branch workspace from a base ref.',
     dialogCreateWorktreeTitle: 'Create worktree',
     dialogForceRemove: 'Force delete even when Git reports local changes',
+    dialogPreferencesDescription: 'Choose interface defaults for this workspace.',
+    dialogPreferencesTitle: 'Preferences',
     dialogRemoveWorktreeDescription:
       'Delete the selected worktree checkout. Worktrees with local changes should be reviewed before removal.',
     dialogRemoveWorktreeTitle: 'Delete worktree',
     dialogWorktreePath: 'Worktree path',
     emptyNoHistory: 'No history loaded for this workspace.',
+    emptyNoBranches: 'No local branches found.',
     emptyNoRepository: 'No repository open',
     emptyNoRecentRepositories: 'No recent repositories.',
     emptyNoRepositoryForWorktrees: 'Open a repository to view worktrees.',
@@ -76,6 +82,7 @@ const TRANSLATIONS = {
     historyFileDiff: 'File diff',
     labelCurrentBranch: 'Current branch',
     labelCurrentRepository: 'Current repository',
+    labelBranches: 'Branches',
     labelAuthorAvatar: 'Author avatar',
     labelDiff: 'Diff',
     labelLocked: 'Locked',
@@ -84,6 +91,7 @@ const TRANSLATIONS = {
     labelRepositoryPath: 'Repository path',
     labelRepositorySearch: 'Filter repositories',
     labelSelected: 'Selected',
+    labelLanguage: 'Language',
     labelSyncActions: 'Sync actions',
     labelWorktree: 'Worktree',
     labelWorkspaceViews: 'Workspace views',
@@ -118,7 +126,9 @@ const TRANSLATIONS = {
     titleCreateWorktree: 'Create worktree',
     titleDeleteWorktree: 'Delete this worktree',
     titleFetch: 'Fetch remote refs',
+    titleOpenAnotherRepository: 'Add another local repository',
     titleOpenRepository: 'Open repository path',
+    titlePreferences: 'Open preferences',
     titlePull: 'Pull into selected worktree',
     titlePush: 'Push selected branch',
     titleRefresh: 'Refresh repository status',
@@ -136,11 +146,14 @@ const TRANSLATIONS = {
     actionCreateNew: '새로 만들기',
     actionDelete: '삭제',
     actionFetch: 'Fetch',
+    actionOpenAnotherRepository: '저장소 추가',
     actionOpen: '열기',
+    actionPreferences: '환경설정',
     actionPull: 'Pull',
     actionPush: 'Push',
     actionRefresh: '새로고침',
     actionRemoveWorktree: 'Worktree 삭제',
+    branchList: '브랜치 목록',
     changesConflicts: '충돌',
     changesDiffLabel: '변경 파일 diff',
     changesDiffLoading: 'Diff를 불러오는 중...',
@@ -172,11 +185,14 @@ const TRANSLATIONS = {
     dialogCreateWorktreeDescription: '기준 ref에서 새 브랜치 워크스페이스를 만듭니다.',
     dialogCreateWorktreeTitle: 'Worktree 생성',
     dialogForceRemove: 'Git이 로컬 변경 사항을 보고해도 강제로 삭제',
+    dialogPreferencesDescription: '이 워크스페이스의 인터페이스 기본값을 선택합니다.',
+    dialogPreferencesTitle: '환경설정',
     dialogRemoveWorktreeDescription:
       '선택한 worktree 체크아웃을 삭제합니다. 로컬 변경 사항이 있는 worktree는 삭제 전에 확인해야 합니다.',
     dialogRemoveWorktreeTitle: 'Worktree 삭제',
     dialogWorktreePath: 'Worktree 경로',
     emptyNoHistory: '이 워크스페이스에 불러온 히스토리가 없습니다.',
+    emptyNoBranches: '로컬 브랜치를 찾지 못했습니다.',
     emptyNoRepository: '열린 저장소 없음',
     emptyNoRecentRepositories: '최근 저장소가 없습니다.',
     emptyNoRepositoryForWorktrees: '워크트리를 보려면 저장소 경로를 여세요.',
@@ -200,6 +216,7 @@ const TRANSLATIONS = {
     historyFileDiff: '파일 diff',
     labelCurrentBranch: '현재 브랜치',
     labelCurrentRepository: '현재 저장소',
+    labelBranches: '브랜치',
     labelAuthorAvatar: '작성자 프로필 이미지',
     labelDiff: 'Diff',
     labelLocked: '잠김',
@@ -208,6 +225,7 @@ const TRANSLATIONS = {
     labelRepositoryPath: '저장소 경로',
     labelRepositorySearch: '저장소 필터',
     labelSelected: '선택됨',
+    labelLanguage: '언어',
     labelSyncActions: '동기화 작업',
     labelWorktree: '워크트리',
     labelWorkspaceViews: '워크스페이스 보기',
@@ -242,7 +260,9 @@ const TRANSLATIONS = {
     titleCreateWorktree: 'Worktree 생성',
     titleDeleteWorktree: '이 worktree 삭제',
     titleFetch: '원격 ref Fetch',
+    titleOpenAnotherRepository: '다른 로컬 저장소 추가',
     titleOpenRepository: '저장소 경로 열기',
+    titlePreferences: '환경설정 열기',
     titlePull: '선택한 worktree로 Pull',
     titlePush: '선택한 브랜치 Push',
     titleRefresh: '저장소 상태 새로고침',
@@ -255,10 +275,14 @@ const TRANSLATIONS = {
 
 export type TranslationKey = keyof typeof TRANSLATIONS.en;
 
-export const DEFAULT_LANGUAGE: Language = 'ko';
+export const DEFAULT_LANGUAGE: Language = 'en';
 export const LANGUAGE_STORAGE_KEY = 'interfaceLanguage';
 
 export const isLanguage = (value: unknown): value is Language => value === 'en' || value === 'ko';
+
+export const getDefaultLanguageForLocale = (locale: string): Language => {
+  return locale.trim().toLowerCase().startsWith('ko') ? 'ko' : DEFAULT_LANGUAGE;
+};
 
 export const translate = (language: Language, key: TranslationKey): TranslationValue => TRANSLATIONS[language][key];
 
