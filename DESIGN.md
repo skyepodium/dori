@@ -70,7 +70,7 @@ Avoid:
 
 ## Information Architecture
 
-- Repository selector: filtered dropdown with recent local repositories.
+- Repository selector: filtered dropdown with recent local repositories and a separate system directory picker for adding another local repository.
 - Worktree navigation: always-visible filtered source list.
 - Branch list: compact sidebar section for the selected worktree's local branches.
 - Workspace header: current repository, selected worktree, branch, sync state, dirty state, and lock state.
@@ -157,6 +157,7 @@ Required states:
 - Empty: no repository, no changes, no history, and no extra worktrees need distinct messages.
 - Clean working tree: after commit, the changes view must show a clear clean state with a title and supporting text.
 - Selectors: repository inventory lives in a filtered dropdown with internal scrolling.
+- Repository opening: adding a repository uses the system directory picker; the selector does not expose a manual path text field.
 - Repository order: selecting an existing repository must not reorder the recent repository list.
 - Repository duplication: opening the active repository again is a no-op with no duplicate row, no list reorder, and no broad loading flicker.
 - Multiple repositories: adding a local repository and switching to a recent repository are separate actions.

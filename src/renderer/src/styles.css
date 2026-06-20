@@ -81,8 +81,7 @@ textarea:focus-visible,
 .dialog__header,
 .dialog__footer,
 .workspace-meta,
-.toolbar,
-.path-row {
+.toolbar {
   align-items: center;
   display: flex;
 }
@@ -126,10 +125,6 @@ h2 {
   font-weight: 700;
   margin: var(--space-12) 0 var(--space-6);
   text-transform: uppercase;
-}
-
-.path-row {
-  gap: var(--space-8);
 }
 
 .text-input {
@@ -404,6 +399,10 @@ h2 {
   display: grid;
   gap: var(--space-2);
   min-height: 44px;
+}
+
+.repository-row + .repository-row {
+  border-top-color: var(--color-border);
 }
 
 .repository-row:hover:not(:disabled),

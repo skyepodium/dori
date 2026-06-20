@@ -762,16 +762,6 @@ const App = (): ReactElement => {
   const getOperationCompleteMessage = (operation: 'fetch' | 'pull' | 'push'): string =>
     state.language === 'ko' ? `${t(OPERATION_LABEL_KEYS[operation])} 완료.` : `${t(OPERATION_LABEL_KEYS[operation])} complete.`;
 
-  const setRepositoryPath = (repositoryPath: string): void => {
-    setState((current) => ({
-      ...current,
-      repositoryPath,
-      repositoryMenuOpen: true,
-      errorMessage: null,
-      successMessage: null
-    }));
-  };
-
   const runOperation = useCallback(
     async (
       operation: OperationName,
@@ -866,17 +856,6 @@ const App = (): ReactElement => {
       successMessage: null
     }));
     openRepositoryPath(selection.path, t('successOpenRepository'));
-  };
-
-  const openRepository = (): void => {
-    const repositoryPath = state.repositoryPath.trim();
-
-    if (repositoryPath === '') {
-      void addRepositoryFromDirectory();
-      return;
-    }
-
-    openRepositoryPath(repositoryPath, t('successOpenRepository'));
   };
 
   const switchRepository = (repositoryPath: string): void => {
@@ -1242,32 +1221,6 @@ const App = (): ReactElement => {
 
           {state.repositoryMenuOpen ? (
             <div className="selector-menu" role="presentation">
-              <label className="field-label" htmlFor="repository-path">
-                {t('labelRepositoryPath')}
-              </label>
-              <div className="path-row">
-                <input
-                  autoComplete="off"
-                  className="text-input"
-                  disabled={!canUseRepositorySelector}
-                  id="repository-path"
-                  onChange={(event) => setRepositoryPath(event.target.value)}
-                  placeholder={t('pathPlaceholder')}
-                  type="text"
-                  value={state.repositoryPath}
-                />
-                <button
-                  className="primary-button"
-                  disabled={!canUseRepositorySelector || isOpeningRepository}
-                  onClick={() => {
-                    void openRepository();
-                  }}
-                  title={t('titleOpenRepository')}
-                  type="button"
-                >
-                  {t('actionOpen')}
-                </button>
-              </div>
               <button
                 className="secondary-button"
                 disabled={!canUseRepositorySelector || isOpeningRepository}
